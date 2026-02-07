@@ -11,6 +11,7 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
         os: [ubuntu-latest, macos-latest]
@@ -34,7 +35,3 @@ jobs:
       - name: Test with pytest
         run: |
           python -m pytest -n auto --dist loadfile --ignore=test/integration/modules/ --durations=5 --cov-report term --cov=. .
-      - uses: codecov/codecov-action@v4
-        with:
-          fail_ci_if_error: false
-          verbose: true
