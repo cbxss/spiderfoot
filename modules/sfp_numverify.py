@@ -91,8 +91,7 @@ class sfp_numverify(SpiderFootPlugin):
             'access_key': self.opts['api_key']
         }
 
-        # Free API does not support HTTPS for no adequately explained reason
-        res = self.sf.fetchUrl("http://apilayer.net/api/validate?" + urllib.parse.urlencode(params),
+        res = self.sf.fetchUrl("https://apilayer.net/api/validate?" + urllib.parse.urlencode(params),
                                timeout=self.opts['_fetchtimeout'],
                                useragent=self.opts['_useragent'])
 

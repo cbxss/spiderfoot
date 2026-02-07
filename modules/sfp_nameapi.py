@@ -76,7 +76,7 @@ class sfp_nameapi(SpiderFootPlugin):
 
     def queryEmailAddr(self, qry):
         res = self.sf.fetchUrl(
-            f"http://api.nameapi.org/rest/v5.3/email/disposableemailaddressdetector?apiKey={self.opts['api_key']}&emailAddress={qry}",
+            f"https://api.nameapi.org/rest/v5.3/email/disposableemailaddressdetector?apiKey={self.opts['api_key']}&emailAddress={qry}",
             timeout=self.opts['_fetchtimeout'],
             useragent="SpiderFoot"
         )

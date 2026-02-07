@@ -103,7 +103,7 @@ class sfp_vxvault(SpiderFootPlugin):
             return self.parseBlacklist(blacklist)
 
         res = self.sf.fetchUrl(
-            "http://vxvault.net/URL_List.php",
+            "https://vxvault.net/URL_List.php",
             timeout=10,
             useragent=self.opts['_useragent'],
         )
@@ -194,7 +194,7 @@ class sfp_vxvault(SpiderFootPlugin):
         self.debug(f"Checking maliciousness of {eventData} ({eventName}) with VXVault.net")
 
         if self.queryBlacklist(eventData):
-            url = "http://vxvault.net/URL_List.php"
+            url = "https://vxvault.net/URL_List.php"
             text = f"VXVault Malicious URL List [{eventData}]\n<SFURL>{url}</SFURL>"
             evt = SpiderFootEvent(evtType, text, self.__name__, event)
             self.notifyListeners(evt)

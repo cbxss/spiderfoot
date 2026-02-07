@@ -1,16 +1,16 @@
 <a href="https://www.spiderfoot.net/r.php?u=aHR0cHM6Ly93d3cuc3BpZGVyZm9vdC5uZXQv&s=os_gh"><img src="https://www.spiderfoot.net/wp-content/themes/spiderfoot/img/spiderfoot-wide.png"></a>
 
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/smicallef/spiderfoot/master/LICENSE)
-[![Python Version](https://img.shields.io/badge/python-3.7+-green)](https://www.python.org)
-[![Stable Release](https://img.shields.io/badge/version-4.0-blue.svg)](https://github.com/smicallef/spiderfoot/releases/tag/v4.0)
-[![CI status](https://github.com/smicallef/spiderfoot/workflows/Tests/badge.svg)](https://github.com/smicallef/spiderfoot/actions?query=workflow%3A"Tests")
-[![Last Commit](https://img.shields.io/github/last-commit/smicallef/spiderfoot)](https://github.com/smicallef/spiderfoot/commits/master)
-[![Codecov](https://codecov.io/github/smicallef/spiderfoot/coverage.svg)](https://codecov.io/github/smicallef/spiderfoot)
-[![Twitter Follow](https://img.shields.io/twitter/follow/spiderfoot?label=follow&style=social)](https://twitter.com/spiderfoot)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/cbxss/spiderfoot/master/LICENSE)
+[![Python Version](https://img.shields.io/badge/python-3.10+-green)](https://www.python.org)
+[![Stable Release](https://img.shields.io/badge/version-4.1.0-blue.svg)](https://github.com/cbxss/spiderfoot/releases/tag/v4.1.0)
+[![CI status](https://github.com/cbxss/spiderfoot/workflows/Tests/badge.svg)](https://github.com/cbxss/spiderfoot/actions?query=workflow%3A"Tests")
+[![Last Commit](https://img.shields.io/github/last-commit/cbxss/spiderfoot)](https://github.com/cbxss/spiderfoot/commits/master)
 [![Discord](https://img.shields.io/discord/770524432464216074)](https://discord.gg/vyvztrG)
 
-**SpiderFoot** is an open source intelligence (OSINT) automation tool. It integrates with just about every data source available and utilises a range of methods for data analysis, making that data easy to navigate. 
+> **Revival Fork** of [smicallef/spiderfoot](https://github.com/smicallef/spiderfoot) — modernized for Python 3.10+, cleaned up dead modules, and actively maintained. See [CHANGES.md](CHANGES.md) for the full list of improvements.
+
+**SpiderFoot** is an open source intelligence (OSINT) automation tool. It integrates with just about every data source available and utilises a range of methods for data analysis, making that data easy to navigate.
 
 SpiderFoot has an embedded web-server for providing a clean and intuitive web-based interface but can also be used completely via the command-line.  It's written in **Python 3** and **MIT-licensed**.
 
@@ -20,7 +20,7 @@ SpiderFoot has an embedded web-server for providing a clean and intuitive web-ba
 
 - Web based UI or CLI
 - Over 200 modules (see below)
-- Python 3.7+
+- Python 3.10+
 - YAML-configurable [correlation engine](/correlations/README.md) with [37 pre-defined rules](/correlations)
 - CSV/JSON/GEXF export
 - API key export/import
@@ -31,26 +31,7 @@ SpiderFoot has an embedded web-server for providing a clean and intuitive web-ba
 - TOR integration for dark web searching
 - Dockerfile for Docker-based deployments
 - Can call other tools like DNSTwist, Whatweb, Nmap and CMSeeK
-- [Actively developed since 2012!](https://medium.com/@micallst/lessons-learned-from-my-10-year-open-source-project-4a4c8c2b4f64)
-
-### WANT MORE?
-
-Need more from SpiderFoot? Check out [SpiderFoot HX](https://www.spiderfoot.net/hx) for:
-- 100% Cloud-based and managed for you
-- Attack Surface Monitoring with change notifications by email, REST and Slack
-- Multiple targets per scan
-- Multi-user collaboration
-- Authenticated and 2FA
-- Investigations
-- Customer support
-- Third party tools pre-installed & configured
-- Drive it with a fully RESTful API
-- TOR integration built-in
-- Screenshotting
-- Bring your own Python SpiderFoot modules
-- Feed scan data to Splunk, ElasticSearch and REST endpoints
-
-See the full set of differences between SpiderFoot HX and the open source version [here](https://www.spiderfoot.net/open-source-vs-hx/).
+- [Originally developed since 2012!](https://medium.com/@micallst/lessons-learned-from-my-10-year-open-source-project-4a4c8c2b4f64)
 
 ### USES
 
@@ -68,7 +49,7 @@ You can target the following entities in a SpiderFoot scan:
  - Username
  - Person's name
  - Bitcoin address
- 
+
 SpiderFoot's 200+ modules feed each other in a publisher/subscriber model to ensure maximum data extraction to do things like:
 
 - [Host/sub-domain/TLD enumeration/extraction](https://asciinema.org/a/295912)
@@ -90,32 +71,38 @@ SpiderFoot's 200+ modules feed each other in a publisher/subscriber model to ens
 
 ### INSTALLING & RUNNING
 
-To install and run SpiderFoot, you need at least Python 3.7 and a number of Python libraries which you can install with `pip`. We recommend you install a packaged release since master will often have bleeding edge features and modules that aren't fully tested.
+SpiderFoot requires Python 3.10+ and uses [uv](https://docs.astral.sh/uv/) for dependency management.
 
-#### Stable build (packaged release):
-
-```
- wget https://github.com/smicallef/spiderfoot/archive/v4.0.tar.gz
- tar zxvf v4.0.tar.gz
- cd spiderfoot-4.0
- pip3 install -r requirements.txt
- python3 ./sf.py -l 127.0.0.1:5001
-```
-
-#### Development build (cloning git master branch):
+#### Quick start:
 
 ```
- git clone https://github.com/smicallef/spiderfoot.git
- cd spiderfoot
- pip3 install -r requirements.txt
- python3 ./sf.py -l 127.0.0.1:5001
+git clone https://github.com/cbxss/spiderfoot.git
+cd spiderfoot
+uv venv && uv sync
+uv run python sf.py -l 127.0.0.1:5001
+```
+
+#### Using pip (alternative):
+
+```
+git clone https://github.com/cbxss/spiderfoot.git
+cd spiderfoot
+pip3 install .
+python3 ./sf.py -l 127.0.0.1:5001
+```
+
+#### Docker:
+
+```
+docker build -t spiderfoot .
+docker run -p 5001:5001 -v sf_data:/var/lib/spiderfoot spiderfoot
 ```
 
 Check out the [documentation](https://www.spiderfoot.net/documentation) and our [asciinema videos](https://asciinema.org/~spiderfoot) for more tutorials.
 
 ### COMMUNITY
 
-Whether you're a contributor, user or just curious about SpiderFoot and OSINT in general, we'd love to have you join our community! SpiderFoot now has a [Discord server](https://discord.gg/vyvztrG) for seeking help from the community, requesting features or just general OSINT chit-chat.
+Whether you're a contributor, user or just curious about SpiderFoot and OSINT in general, we'd love to have you join our community! SpiderFoot has a [Discord server](https://discord.gg/vyvztrG) for seeking help from the community, requesting features or just general OSINT chit-chat.
 
 ### WRITING CORRELATION RULES
 
@@ -145,21 +132,18 @@ Account Finder|Look for possible associated accounts on over 500 social and othe
 [ARIN](https://www.arin.net/)|Queries ARIN registry for contact information.|Free API
 [Azure Blob Finder](https://azure.microsoft.com/en-in/services/storage/blobs/)|Search for potential Azure blobs associated with the target and attempt to list their contents.|Free API
 Base64 Decoder|Identify Base64-encoded strings in URLs, often revealing interesting hidden information.|Internal
-[BGPView](https://bgpview.io/)|Obtain network information from BGPView API.|Free API
+[BGP.tools](https://bgp.tools/)|Obtain network information from BGP.tools whois service.|Free API
 Binary String Extractor|Attempt to identify strings in binary content.|Internal
 [BinaryEdge](https://www.binaryedge.io/)|Obtain information from BinaryEdge.io Internet scanning systems, including breaches, vulnerabilities, torrents and passive DNS.|Tiered API
 [Bing (Shared IPs)](https://www.bing.com/)|Search Bing for hosts sharing the same IP.|Tiered API
 [Bing](https://www.bing.com/)|Obtain information from bing to identify sub-domains and links.|Tiered API
 Bitcoin Finder|Identify bitcoin addresses in scraped webpages.|Internal
-[Bitcoin Who's Who](https://bitcoinwhoswho.com/)|Check for Bitcoin addresses against the Bitcoin Who's Who database of suspect/malicious addresses.|Tiered API
-[BitcoinAbuse](https://www.bitcoinabuse.com/)|Check Bitcoin addresses against the bitcoinabuse.com database of suspect/malicious addresses.|Free API
 [Blockchain](https://www.blockchain.com/)|Queries blockchain.info to find the balance of identified bitcoin wallet addresses.|Free API
 [blocklist.de](http://www.blocklist.de/en/index.html)|Check if a netblock or IP is malicious according to blocklist.de.|Free API
 [BotScout](https://botscout.com/)|Searches BotScout.com's database of spam-bot IP addresses and e-mail addresses.|Tiered API
 [botvrij.eu](https://botvrij.eu/)|Check if a domain is malicious according to botvrij.eu.|Free API
 [BuiltWith](https://builtwith.com/)|Query BuiltWith.com's Domain API for information about your target's web technology stack, e-mail addresses and more.|Tiered API
 [C99](https://api.c99.nl/)|Queries the C99 API which offers various data (geo location, proxy detection, phone lookup, etc).|Commercial API
-[CallerName](http://callername.com/)|Lookup US phone number location and reputation information.|Free API
 [Censys](https://censys.io/)|Obtain host information from Censys.io.|Tiered API
 [Certificate Transparency](https://crt.sh/)|Gather hostnames from historical certificates in crt.sh.|Free API
 [CertSpotter](https://sslmate.com/certspotter/)|Gather information about SSL certificates from SSLMate CertSpotter API.|Tiered API
@@ -167,7 +151,6 @@ Bitcoin Finder|Identify bitcoin addresses in scraped webpages.|Internal
 [CIRCL.LU](https://www.circl.lu/)|Obtain information from CIRCL.LU's Passive DNS and Passive SSL databases.|Free API
 [CleanBrowsing.org](https://cleanbrowsing.org/)|Check if a host would be blocked by CleanBrowsing.org DNS content filters.|Free API
 [CleanTalk Spam List](https://cleantalk.org)|Check if a netblock or IP address is on CleanTalk.org's spam IP list.|Free API
-[Clearbit](https://clearbit.com/)|Check for names, addresses, domains and more based on lookups of e-mail addresses on clearbit.com.|Tiered API
 [CloudFlare DNS](https://www.cloudflare.com/)|Check if a host would be blocked by CloudFlare DNS.|Free API
 [CoinBlocker Lists](https://zerodot1.gitlab.io/CoinBlockerListsWeb/)|Check if a domain appears on CoinBlocker lists.|Free API
 [CommonCrawl](http://commoncrawl.org/)|Searches for URLs found through CommonCrawl.org.|Free API
@@ -176,9 +159,7 @@ Company Name Extractor|Identify company names in any obtained data.|Internal
 Cookie Extractor|Extract Cookies from HTTP headers.|Internal
 Country Name Extractor|Identify country names in any obtained data.|Internal
 Credit Card Number Extractor|Identify Credit Card Numbers in any data|Internal
-[Crobat API](https://sonar.omnisint.io/)|Search Crobat API for subdomains.|Free API
 Cross-Referencer|Identify whether other domains are associated ('Affiliates') of the target by looking for links back to the target site(s).|Internal
-[CRXcavator](https://crxcavator.io/)|Search CRXcavator for Chrome extensions.|Free API
 Custom Threat Feed|Check if a host/domain, netblock, ASN or IP is malicious according to your custom feed.|Internal
 [CyberCrime-Tracker.net](https://cybercrime-tracker.net/)|Check if a host/domain or IP address is malicious according to CyberCrime-Tracker.net.|Free API
 [Debounce](https://debounce.io/)|Check whether an email is disposable|Free API
@@ -197,7 +178,6 @@ DNS Zone Transfer|Attempts to perform a full DNS zone transfer.|Internal
 [DroneBL](https://dronebl.org/)|Query the DroneBL database for open relays, open proxies, vulnerable servers, etc.|Free API
 [DuckDuckGo](https://duckduckgo.com/)|Query DuckDuckGo's API for descriptive information about your target.|Free API
 E-Mail Address Extractor|Identify e-mail addresses in any obtained data.|Internal
-[EmailCrawlr](https://emailcrawlr.com/)|Search EmailCrawlr for email addresses and phone numbers associated with a domain.|Tiered API
 [EmailFormat](https://www.email-format.com/)|Look up e-mail addresses on email-format.com.|Free API
 [EmailRep](https://emailrep.io/)|Search EmailRep.io for email address reputation.|Tiered API
 [Emerging Threats](https://rules.emergingthreats.net/)|Check if a netblock or IP address is malicious according to EmergingThreats.net.|Free API
@@ -209,7 +189,6 @@ File Metadata Extractor|Extracts meta data from documents and images.|Internal
 [Focsec](https://focsec.com/)|Look up IP address information from Focsec.|Tiered API
 [FortiGuard Antispam](https://www.fortiguard.com/)|Check if an IP address is malicious according to FortiGuard Antispam.|Free API
 [Fraudguard](https://fraudguard.io/)|Obtain threat information from Fraudguard.io|Tiered API
-[F-Secure Riddler.io](https://riddler.io/)|Obtain network information from F-Secure Riddler.io API.|Commercial API
 [FullContact](https://www.fullcontact.com)|Gather domain and e-mail information from FullContact.com API.|Tiered API
 [FullHunt](https://fullhunt.io/)|Identify domain attack surface using FullHunt API.|Tiered API
 [Github](https://github.com/)|Identify associated public code repositories on Github.|Free API
@@ -236,8 +215,10 @@ Human Name Extractor|Attempt to identify human names in fetched content.|Interna
 IBAN Number Extractor|Identify International Bank Account Numbers (IBANs) in any data.|Internal
 [Iknowwhatyoudownload.com](https://iknowwhatyoudownload.com/en/peer/)|Check iknowwhatyoudownload.com for IP addresses that have been using torrents.|Tiered API
 [IntelligenceX](https://intelx.io/)|Obtain information from IntelligenceX about identified IP addresses, domains, e-mail addresses and phone numbers.|Tiered API
+[InternetDB](https://internetdb.shodan.io/)|Obtain information from Shodan's InternetDB for free, no API key required.|Free API
 Interesting File Finder|Identifies potential files of interest, e.g. office documents, zip files.|Internal
 [Internet Storm Center](https://isc.sans.edu)|Check if an IP address is malicious according to SANS ISC.|Free API
+[ip2location.io](https://www.ip2location.io/)|Identify geolocation of IP addresses using ip2location.io API.|Tiered API
 [ipapi.co](https://ipapi.co/)|Queries ipapi.co to identify geolocation of IP Addresses using ipapi.co API|Tiered API
 [ipapi.com](https://ipapi.com/)|Queries ipapi.com to identify geolocation of IP Addresses using ipapi.com API|Tiered API
 [IPInfo.io](https://ipinfo.io)|Identifies the physical location of IP addresses identified using ipinfo.io.|Tiered API
@@ -248,20 +229,18 @@ Interesting File Finder|Identifies potential files of interest, e.g. office docu
 Junk File Finder|Looks for old/temporary and other similar files.|Internal
 [Keybase](https://keybase.io/)|Obtain additional information about domain names and identified usernames.|Free API
 [Koodous](https://koodous.com/apks/)|Search Koodous for mobile apps.|Tiered API
+[LeakCheck](https://leakcheck.io/)|Search LeakCheck.io for breached credentials.|Commercial API
+[LeakCheck (Public)](https://leakcheck.io/)|Search LeakCheck.io public API for breached email addresses.|Free API
 [LeakIX](https://leakix.net/)|Search LeakIX for host data leaks, open ports, software and geoip.|Free API
 [Leak-Lookup](https://leak-lookup.com/)|Searches Leak-Lookup.com's database of breaches.|Free API
 [Maltiverse](https://maltiverse.com)|Obtain information about any malicious activities involving IP addresses|Free API
 [MalwarePatrol](https://www.malwarepatrol.net/)|Searches malwarepatrol.net's database of malicious URLs/IPs.|Tiered API
 [MetaDefender](https://metadefender.opswat.com/)|Search MetaDefender API for IP address and domain IP reputation.|Tiered API
 [Mnemonic PassiveDNS](https://www.mnemonic.no)|Obtain Passive DNS information from PassiveDNS.mnemonic.no.|Free API
-[multiproxy.org Open Proxies](https://multiproxy.org/)|Check if an IP address is an open proxy according to multiproxy.org open proxy list.|Free API
-[MySpace](https://myspace.com/)|Gather username and location from MySpace.com profiles.|Free API
 [NameAPI](https://www.nameapi.org/)|Check whether an email is disposable|Tiered API
 [NetworksDB](https://networksdb.io/)|Search NetworksDB.io API for IP address and domain information.|Tiered API
 [NeutrinoAPI](https://www.neutrinoapi.com/)|Search NeutrinoAPI for phone location information, IP address information, and host reputation.|Tiered API
-[numverify](http://numverify.com/)|Lookup phone number location and carrier information from numverify.com.|Tiered API
-[Onion.link](https://onion.link/)|Search Tor 'Onion City' search engine for mentions of the target domain using Google Custom Search.|Free API
-[Onionsearchengine.com](https://as.onionsearchengine.com)|Search Tor onionsearchengine.com for mentions of the target domain.|Free API
+[numverify](https://numverify.com/)|Lookup phone number location and carrier information from numverify.com.|Tiered API
 [Onyphe](https://www.onyphe.io)|Check Onyphe data (threat list, geo-location, pastries, vulnerabilities)  about a given IP.|Tiered API
 [Open Bug Bounty](https://www.openbugbounty.org/)|Check external vulnerability scanning/reporting service openbugbounty.org to see if the target is listed.|Free API
 [OpenCorporates](https://opencorporates.com)|Look up company information from OpenCorporates.|Tiered API
@@ -278,26 +257,21 @@ Phone Number Extractor|Identify phone numbers in scraped webpages.|Internal
 Port Scanner - TCP|Scans for commonly open TCP ports on Internet-facing systems.|Internal
 [Project Honey Pot](https://www.projecthoneypot.org/)|Query the Project Honey Pot database for IP addresses.|Free API
 [ProjectDiscovery Chaos](https://chaos.projectdiscovery.io)|Search for hosts/subdomains using chaos.projectdiscovery.io|Commercial API
-[Psbdmp](https://psbdmp.cc/)|Check psbdmp.cc (PasteBin Dump) for potentially hacked e-mails and domains.|Free API
 [Pulsedive](https://pulsedive.com/)|Obtain information from Pulsedive's API.|Tiered API
 [PunkSpider](https://punkspider.io/)|Check the QOMPLX punkspider.io service to see if the target is listed as vulnerable.|Free API
 [Quad9](https://quad9.net/)|Check if a host would be blocked by Quad9 DNS.|Free API
 [ReverseWhois](https://www.reversewhois.io/)|Reverse Whois lookups using reversewhois.io.|Free API
 [RIPE](https://www.ripe.net/)|Queries the RIPE registry (includes ARIN data) to identify netblocks and other info.|Free API
-[RiskIQ](https://community.riskiq.com/)|Obtain information from RiskIQ's (formerly PassiveTotal) Passive DNS and Passive SSL databases.|Tiered API
 [Robtex](https://www.robtex.com/)|Search Robtex.com for hosts sharing the same IP.|Free API
-[searchcode](https://searchcode.com/)|Search searchcode for code repositories mentioning the target domain.|Free API
 [SecurityTrails](https://securitytrails.com/)|Obtain Passive DNS and other information from SecurityTrails|Tiered API
 [Seon](https://seon.io/)|Queries seon.io to gather intelligence about IP Addresses, email addresses, and phone numbers|Commercial API
 [SHODAN](https://www.shodan.io/)|Obtain information from SHODAN about identified IP addresses.|Tiered API
 Similar Domain Finder|Search various sources to identify similar looking domain names, for instance squatted domains.|Internal
 [Skymem](http://www.skymem.info/)|Look up e-mail addresses on Skymem.|Free API
-[SlideShare](https://www.slideshare.net)|Gather name and location from SlideShare profiles.|Free API
 [Snov](https://snov.io/)|Gather available email IDs from identified domains|Tiered API
 [Social Links](https://sociallinks.io/)|Queries SocialLinks.io to gather intelligence from social media platforms and dark web.|Commercial API
 [Social Media Profile Finder](https://developers.google.com/custom-search)|Tries to discover the social media profiles for human names identified.|Tiered API
 Social Network Identifier|Identify presence on social media networks such as LinkedIn, Twitter and others.|Internal
-[SORBS](http://www.sorbs.net/)|Query the SORBS database for open relays, open proxies, vulnerable servers, etc.|Free API
 [SpamCop](https://www.spamcop.net/)|Check if a netblock or IP address is in the SpamCop database.|Free API
 [Spamhaus Zen](https://www.spamhaus.org/)|Check if a netblock or IP address is in the Spamhaus Zen database.|Free API
 [spur.us](https://spur.us/)|Obtain information about any malicious activities involving IP addresses found|Commercial API
@@ -307,46 +281,40 @@ SSL Certificate Analyzer|Gather information about SSL certificates used by the t
 [Steven Black Hosts](https://github.com/StevenBlack/hosts)|Check if a domain is malicious (malware or adware) according to Steven Black Hosts list.|Free API
 Strange Header Identifier|Obtain non-standard HTTP headers returned by web servers.|Internal
 Subdomain Takeover Checker|Check if affiliated subdomains are vulnerable to takeover.|Internal
-[Sublist3r PassiveDNS](https://api.sublist3r.com)|Passive subdomain enumeration using Sublist3r's API|Free API
 [SURBL](http://www.surbl.org/)|Check if a netblock, IP address or domain is in the SURBL blacklist.|Free API
 [Talos Intelligence](https://talosintelligence.com/)|Check if a netblock or IP address is malicious according to TalosIntelligence.|Free API
 [TextMagic](https://www.textmagic.com/)|Obtain phone number type from TextMagic API|Tiered API
-[Threat Jammer](https://threatjammer.com)|Check if an IP address is malicious according to ThreatJammer.com|Tiered API
-[ThreatCrowd](https://www.threatcrowd.org)|Obtain information from ThreatCrowd about identified IP addresses, domains and e-mail addresses.|Free API
 [ThreatFox](https://threatfox.abuse.ch)|Check if an IP address is malicious according to ThreatFox.|Free API
 [ThreatMiner](https://www.threatminer.org/)|Obtain information from ThreatMiner's database for passive DNS and threat intelligence.|Free API
 TLD Searcher|Search all Internet TLDs for domains with the same name as the target (this can be very slow.)|Internal
-[Tool - CMSeeK]([https://github.com/Tuhinshubhra/CMSeeK](https://github.com/Tuhinshubhra/CMSeeK))|Identify what Content Management System (CMS) might be used.|Tool
-[Tool - DNSTwist]([https://github.com/elceef/dnstwist](https://github.com/elceef/dnstwist))|Identify bit-squatting, typo and other similar domains to the target using a local DNSTwist installation.|Tool
-[Tool - nbtscan]([http://www.unixwiz.net/tools/nbtscan.html](http://www.unixwiz.net/tools/nbtscan.html))|Scans for open NETBIOS nameservers on your target's network.|Tool
-[Tool - Nmap]([https://nmap.org/](https://nmap.org/))|Identify what Operating System might be used.|Tool
-[Tool - Nuclei]([https://nuclei.projectdiscovery.io/](https://nuclei.projectdiscovery.io/))|Fast and customisable vulnerability scanner.|Tool
-[Tool - onesixtyone]([https://github.com/trailofbits/onesixtyone](https://github.com/trailofbits/onesixtyone))|Fast scanner to find publicly exposed SNMP services.|Tool
-[Tool - Retire.js]([http://retirejs.github.io/retire.js/](http://retirejs.github.io/retire.js/))|Scanner detecting the use of JavaScript libraries with known vulnerabilities|Tool
-[Tool - snallygaster]([https://github.com/hannob/snallygaster](https://github.com/hannob/snallygaster))|Finds file leaks and other security problems on HTTP servers.|Tool
-[Tool - testssl.sh]([https://testssl.sh](https://testssl.sh))|Identify various TLS/SSL weaknesses, including Heartbleed, CRIME and ROBOT.|Tool
-[Tool - TruffleHog]([https://github.com/trufflesecurity/truffleHog](https://github.com/trufflesecurity/truffleHog))|Searches through git repositories for high entropy strings and secrets, digging deep into commit history.|Tool
-[Tool - WAFW00F]([https://github.com/EnableSecurity/wafw00f](https://github.com/EnableSecurity/wafw00f))|Identify what web application firewall (WAF) is in use on the specified website.|Tool
-[Tool - Wappalyzer]([https://www.wappalyzer.com/](https://www.wappalyzer.com/))|Wappalyzer indentifies technologies on websites.|Tool
-[Tool - WhatWeb]([https://github.com/urbanadventurer/whatweb](https://github.com/urbanadventurer/whatweb))|Identify what software is in use on the specified website.|Tool
+[Tool - CMSeeK](https://github.com/Tuhinshubhra/CMSeeK)|Identify what Content Management System (CMS) might be used.|Tool
+[Tool - DNSTwist](https://github.com/elceef/dnstwist)|Identify bit-squatting, typo and other similar domains to the target using a local DNSTwist installation.|Tool
+[Tool - nbtscan](http://www.unixwiz.net/tools/nbtscan.html)|Scans for open NETBIOS nameservers on your target's network.|Tool
+[Tool - Nmap](https://nmap.org/)|Identify what Operating System might be used.|Tool
+[Tool - Nuclei](https://nuclei.projectdiscovery.io/)|Fast and customisable vulnerability scanner.|Tool
+[Tool - onesixtyone](https://github.com/trailofbits/onesixtyone)|Fast scanner to find publicly exposed SNMP services.|Tool
+[Tool - Retire.js](http://retirejs.github.io/retire.js/)|Scanner detecting the use of JavaScript libraries with known vulnerabilities|Tool
+[Tool - snallygaster](https://github.com/hannob/snallygaster)|Finds file leaks and other security problems on HTTP servers.|Tool
+[Tool - testssl.sh](https://testssl.sh)|Identify various TLS/SSL weaknesses, including Heartbleed, CRIME and ROBOT.|Tool
+[Tool - TruffleHog](https://github.com/trufflesecurity/truffleHog)|Searches through git repositories for high entropy strings and secrets, digging deep into commit history.|Tool
+[Tool - WAFW00F](https://github.com/EnableSecurity/wafw00f)|Identify what web application firewall (WAF) is in use on the specified website.|Tool
+[Tool - Wappalyzer](https://www.wappalyzer.com/)|Wappalyzer indentifies technologies on websites.|Tool
+[Tool - WhatWeb](https://github.com/urbanadventurer/whatweb)|Identify what software is in use on the specified website.|Tool
 [TOR Exit Nodes](https://metrics.torproject.org/)|Check if an IP adddress or netblock appears on the Tor Metrics exit node list.|Free API
 [TORCH](https://torchsearch.wordpress.com/)|Search Tor 'TORCH' search engine for mentions of the target domain.|Free API
-[Trashpanda](https://got-hacked.wtf)|Queries Trashpanda to gather intelligence about mentions of target in pastesites|Tiered API
-[Trumail](https://trumail.io/)|Check whether an email is disposable|Free API
 [Twilio](https://www.twilio.com/)|Obtain information from Twilio about phone numbers. Ensure you have the Caller Name add-on installed in Twilio.|Tiered API
-[Twitter](https://twitter.com/)|Gather name and location from Twitter profiles.|Free API
 [UCEPROTECT](http://www.uceprotect.net/)|Check if a netblock or IP address is in the UCEPROTECT database.|Free API
 [URLScan.io](https://urlscan.io/)|Search URLScan.io cache for domain information.|Free API
-[Venmo](https://venmo.com/)|Gather user information from Venmo API.|Free API
 [ViewDNS.info](https://viewdns.info/)|Identify co-hosted websites and perform reverse Whois lookups using ViewDNS.info.|Tiered API
 [VirusTotal](https://www.virustotal.com/)|Obtain information from VirusTotal about identified IP addresses.|Tiered API
 [VoIP Blacklist (VoIPBL)](https://voipbl.org/)|Check if an IP address or netblock is malicious according to VoIP Blacklist (VoIPBL).|Free API
-[VXVault.net](http://vxvault.net/)|Check if a domain or IP address is malicious according to VXVault.net.|Free API
+[VXVault.net](https://vxvault.net/)|Check if a domain or IP address is malicious according to VXVault.net.|Free API
 Web Analytics Extractor|Identify web analytics IDs in scraped webpages and DNS TXT records.|Internal
 Web Framework Identifier|Identify the usage of popular web frameworks like jQuery, YUI and others.|Internal
 Web Server Identifier|Obtain web server banners to identify versions of web servers being used.|Internal
 Web Spider|Spidering of web-pages to extract content for searching.|Internal
 [WhatCMS](https://whatcms.org/)|Check web technology using WhatCMS.org API.|Tiered API
+[WhoisFreaks](https://whoisfreaks.com/)|WHOIS and DNS lookup information from WhoisFreaks API.|Tiered API
 [Whoisology](https://whoisology.com/)|Reverse Whois lookups using Whoisology.com.|Commercial API
 Whois|Perform a WHOIS look-up on domain names and owned netblocks.|Internal
 [Whoxy](https://www.whoxy.com/)|Reverse Whois lookups using Whoxy.com.|Commercial API
@@ -356,11 +324,8 @@ Whois|Perform a WHOIS look-up on domain names and owned netblocks.|Internal
 [XForce Exchange](https://exchange.xforce.ibmcloud.com/)|Obtain IP reputation and passive DNS information from IBM X-Force Exchange.|Tiered API
 [Yandex DNS](https://yandex.com/)|Check if a host would be blocked by Yandex DNS.|Free API
 [Zetalytics](https://zetalytics.com/)|Query the Zetalytics database for hosts on your target domain(s).|Tiered API
-[ZoneFile.io](https://zonefiles.io)|Search ZoneFiles.io Domain query API for domain information.|Tiered API
 [Zone-H Defacement Check](https://zone-h.org/)|Check if a hostname/domain appears on the zone-h.org 'special defacements' RSS feed.|Free API
 
 ### DOCUMENTATION
 
 Read more at the [project website](https://www.spiderfoot.net/r.php?u=aHR0cHM6Ly93d3cuc3BpZGVyZm9vdC5uZXQv&s=os_gh), including more complete documentation, blog posts with tutorials/guides, plus information about [SpiderFoot HX](https://www.spiderfoot.net/r.php?u=aHR0cHM6Ly93d3cuc3BpZGVyZm9vdC5uZXQvaHgvCg==&s=os_gh).
-
-Latest updates announced on [Twitter](https://twitter.com/spiderfoot).

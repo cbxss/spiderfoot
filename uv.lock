@@ -528,12 +528,6 @@ wheels = [
 ]
 
 [[package]]
-name = "ipaddr"
-version = "2.2.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/9d/a7/1b39a16cb90dfe491f57e1cab3103a15d4e8dd9a150872744f531b1106c1/ipaddr-2.2.0.tar.gz", hash = "sha256:4092dfe667588d16aa12b59acb7c8a4024e5dcb23a681cd0b0b602373eca88d6", size = 26266, upload-time = "2017-09-15T20:08:39.692Z" }
-
-[[package]]
 name = "ipwhois"
 version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1082,12 +1076,15 @@ wheels = [
 ]
 
 [[package]]
-name = "pypdf2"
-version = "1.28.6"
+name = "pypdf"
+version = "4.3.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/0b/79/abdc2edda52463490c860232149242b693cbf6179d9863b0c7862cf9fd73/PyPDF2-1.28.6.tar.gz", hash = "sha256:c0840835d18357b077da05bdad1423f5e29419f318135b6a6542895930dc4905", size = 2848080, upload-time = "2022-09-08T11:15:30.238Z" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f0/65/2ed7c9e1d31d860f096061b3dd2d665f501e09faaa0409a3f0d719d2a16d/pypdf-4.3.1.tar.gz", hash = "sha256:b2f37fe9a3030aa97ca86067a56ba3f9d3565f9a791b305c7355d8392c30d91b", size = 293266, upload-time = "2024-07-21T19:35:20.207Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ab/de/d119dd719304154e83eed74b48aec9b3db6ce1d5fd49ab7d23c07ca1f748/PyPDF2-1.28.6-py3-none-any.whl", hash = "sha256:d7118f0187153257b1f906dcfcd8236608f4987b6a9999b7c5ad49114706a1ad", size = 87076, upload-time = "2022-09-08T11:15:22.723Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/60/eccdd92dd4af3e4bea6d6a342f7588c618a15b9bec4b968af581e498bcc4/pypdf-4.3.1-py3-none-any.whl", hash = "sha256:64b31da97eda0771ef22edb1bfecd5deee4b72c3d1736b7df2689805076d6418", size = 295825, upload-time = "2024-07-21T19:35:18.126Z" },
 ]
 
 [[package]]
@@ -1330,7 +1327,6 @@ dependencies = [
     { name = "cryptography" },
     { name = "dnspython" },
     { name = "exifread" },
-    { name = "ipaddr" },
     { name = "ipwhois" },
     { name = "lxml" },
     { name = "mako" },
@@ -1342,7 +1338,7 @@ dependencies = [
     { name = "publicsuffixlist" },
     { name = "pygexf" },
     { name = "pyopenssl" },
-    { name = "pypdf2" },
+    { name = "pypdf" },
     { name = "pysocks" },
     { name = "python-docx" },
     { name = "python-pptx" },
@@ -1371,7 +1367,6 @@ requires-dist = [
     { name = "dnspython", specifier = ">=2.3.0,<3" },
     { name = "exifread", specifier = ">=2.3.2,<3" },
     { name = "flake8", marker = "extra == 'dev'" },
-    { name = "ipaddr", specifier = ">=2.2.0,<3" },
     { name = "ipwhois", specifier = ">=1.1.0,<1.2.0" },
     { name = "lxml", specifier = ">=4.9.2" },
     { name = "mako", specifier = ">=1.2.4,<2" },
@@ -1382,7 +1377,7 @@ requires-dist = [
     { name = "publicsuffixlist", specifier = ">=0.9.3" },
     { name = "pygexf", specifier = ">=0.2.2,<0.3" },
     { name = "pyopenssl", specifier = ">=21.0.0" },
-    { name = "pypdf2", specifier = ">=1.28.6,<2" },
+    { name = "pypdf", specifier = ">=3.0.0,<5" },
     { name = "pysocks", specifier = ">=1.7.1,<2" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-cov", marker = "extra == 'dev'" },

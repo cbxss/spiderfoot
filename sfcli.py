@@ -1369,7 +1369,7 @@ if __name__ == "__main__":
     if args.e:
         try:
             with open(args.e, 'r') as f:
-                cin = f.read()
+                cin = io.StringIO(f.read())
         except BaseException as e:
             print(f"Unable to open {args.e}: ({e})")
             sys.exit(-1)
