@@ -973,7 +973,7 @@ class SpiderFoot:
         s.connect((host, int(port)))
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        ctx.verify_mode = ssl.CERT_NONE  # noqa: DUO122
         sock = ctx.wrap_socket(s)
         sock.do_handshake()
         return sock
