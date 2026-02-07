@@ -276,23 +276,23 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
     # DATA PROVIDER ENDPOINTS (JSON)
     # =====================================================================
 
-    @app.get("/scanlist")
+    @app.api_route("/scanlist", methods=["GET", "POST"])
     async def scanlist():
         return JSONResponse(scan_service.list_scans())
 
-    @app.get("/scanstatus")
+    @app.api_route("/scanstatus", methods=["GET", "POST"])
     async def scanstatus(id: str = Query(...)):
         return JSONResponse(scan_service.scan_status(id))
 
-    @app.get("/scansummary")
+    @app.api_route("/scansummary", methods=["GET", "POST"])
     async def scansummary(id: str = Query(...), by: str = Query(...)):
         return JSONResponse(scan_service.scan_summary(id, by))
 
-    @app.get("/scancorrelations")
+    @app.api_route("/scancorrelations", methods=["GET", "POST"])
     async def scancorrelations(id: str = Query(...)):
         return JSONResponse(scan_service.scan_correlations(id))
 
-    @app.get("/scaneventresults")
+    @app.api_route("/scaneventresults", methods=["GET", "POST"])
     @app.post("/scaneventresults")
     async def scaneventresults(
         request: Request,
@@ -310,7 +310,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
             correlationId = form.get("correlationId", correlationId)
         return JSONResponse(scan_service.scan_event_results(id, eventType, filterfp, correlationId))
 
-    @app.get("/scaneventresultsunique")
+    @app.api_route("/scaneventresultsunique", methods=["GET", "POST"])
     @app.post("/scaneventresultsunique")
     async def scaneventresultsunique(
         request: Request,
@@ -325,7 +325,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
             filterfp = bool(form.get("filterfp", filterfp))
         return JSONResponse(scan_service.scan_event_results_unique(id, eventType, filterfp))
 
-    @app.get("/scanopts")
+    @app.api_route("/scanopts", methods=["GET", "POST"])
     @app.post("/scanopts")
     async def scanopts(request: Request, id: str = Query(None)):
         if request.method == "POST":
@@ -333,7 +333,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
             id = form.get("id", id)
         return JSONResponse(scan_service.scan_config(id))
 
-    @app.get("/scanlog")
+    @app.api_route("/scanlog", methods=["GET", "POST"])
     @app.post("/scanlog")
     async def scanlog(
         request: Request,
@@ -350,7 +350,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
             reverse = form.get("reverse", reverse)
         return JSONResponse(scan_service.scan_logs(id, limit, rowId, reverse))
 
-    @app.get("/scanerrors")
+    @app.api_route("/scanerrors", methods=["GET", "POST"])
     @app.post("/scanerrors")
     async def scanerrors(request: Request, id: str = Query(None), limit: str = Query(None)):
         if request.method == "POST":
@@ -359,13 +359,13 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
             limit = form.get("limit", limit)
         return JSONResponse(scan_service.scan_errors(id, limit))
 
-    @app.get("/scanhistory")
+    @app.api_route("/scanhistory", methods=["GET", "POST"])
     async def scanhistory(id: str = Query(None)):
         if not id:
             return JSONResponse({'error': {'http_status': '404', 'message': 'No scan specified'}}, status_code=404)
         return JSONResponse(scan_service.scan_history(id))
 
-    @app.get("/scanelementtypediscovery")
+    @app.api_route("/scanelementtypediscovery", methods=["GET", "POST"])
     @app.post("/scanelementtypediscovery")
     async def scanelementtypediscovery(request: Request, id: str = Query(None), eventType: str = Query(None)):
         if request.method == "POST":
