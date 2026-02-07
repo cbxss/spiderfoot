@@ -27,7 +27,8 @@ per-file-ignores =
     spiderfoot/config.py:B036
     spiderfoot/dns_utils.py:B036
     spiderfoot/ssl_utils.py:B036
-    spiderfoot/http.py:B036
+    spiderfoot/http.py:B034,B036
+    spiderfoot/ip.py:B036
     spiderfoot/search.py:B036
     test/*:SIM117,B904,B908,ANN,DAR
     docs/conf.py:A
