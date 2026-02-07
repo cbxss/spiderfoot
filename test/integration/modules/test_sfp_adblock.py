@@ -1,6 +1,8 @@
 import pytest
 import unittest
 
+import adblockparser
+
 from modules.sfp_adblock import sfp_adblock
 from sflib import SpiderFoot
 from spiderfoot import SpiderFootEvent, SpiderFootTarget
@@ -19,6 +21,8 @@ class TestModuleIntegrationAdblock(unittest.TestCase):
         target_type = 'INTERNET_NAME'
         target = SpiderFootTarget(target_value, target_type)
         module.setTarget(target)
+
+        module.rules = adblockparser.AdblockRules(['/ad.'])
 
         def new_notifyListeners(self, event):
             expected = 'URL_ADBLOCKED_EXTERNAL'
@@ -62,6 +66,8 @@ class TestModuleIntegrationAdblock(unittest.TestCase):
         target = SpiderFootTarget(target_value, target_type)
         module.setTarget(target)
 
+        module.rules = adblockparser.AdblockRules(['/ad.'])
+
         def new_notifyListeners(self, event):
             expected = 'URL_ADBLOCKED_EXTERNAL'
             if str(event.eventType) != expected:
@@ -103,6 +109,8 @@ class TestModuleIntegrationAdblock(unittest.TestCase):
         target_type = 'INTERNET_NAME'
         target = SpiderFootTarget(target_value, target_type)
         module.setTarget(target)
+
+        module.rules = adblockparser.AdblockRules(['/ad.'])
 
         def new_notifyListeners(self, event):
             raise Exception(f"Raised event {event.eventType}: {event.data}")
