@@ -66,12 +66,7 @@ class sfp_socialprofiles(SpiderFootPlugin):
                 "Register a free Google account",
                 "Click on 'Get A Key'",
                 "Connect a Project",
-                "The API Key will be listed under 'YOUR API KEY'",
-                "If using Bing:",
-                "Visit https://azure.microsoft.com/en-in/services/cognitive-services/bing-web-search-api/",
-                "Register a free account",
-                "Select on Bing Custom Search",
-                "The API keys are listed under 'Key1' and 'Key2' (both should work)"
+                "The API Key will be listed under 'YOUR API KEY'"
             ],
             'favIcon': "https://www.gstatic.com/devrel-devsite/prod/v2210deb8920cd4a55bd580441aa58e7853afc04b39a9d9ac4198e1cd7fbe04ef/developers/images/favicon.png",
             'logo': "https://www.gstatic.com/devrel-devsite/prod/v2210deb8920cd4a55bd580441aa58e7853afc04b39a9d9ac4198e1cd7fbe04ef/developers/images/favicon.png",
@@ -85,7 +80,7 @@ class sfp_socialprofiles(SpiderFootPlugin):
     # Default options
     opts = {
         "count": 20,
-        "method": "bing",
+        "method": "google",
         "tighten": True,
         "bing_api_key": "",
         "google_api_key": "",
@@ -94,8 +89,8 @@ class sfp_socialprofiles(SpiderFootPlugin):
 
     # Option descriptions
     optdescs = {
-        "count": "Number of bing search engine results of identified profiles to iterate through.",
-        "method": "Search engine to use: 'google' or 'bing'.",
+        "count": "Number of search engine results of identified profiles to iterate through.",
+        "method": "Search engine to use: 'google'. (Bing Search APIs retired on 2025-08-11.)",
         "tighten": "Tighten results by expecting to find the keyword of the target domain mentioned in the social media profile page results?",
         "bing_api_key": "Bing API Key for social media profile search.",
         "google_api_key": "Google API Key for social media profile search.",
@@ -106,7 +101,9 @@ class sfp_socialprofiles(SpiderFootPlugin):
     results = None
     errorState = False
 
-    def setup(self, sfc, userOpts=dict()):
+    def setup(self, sfc, userOpts=None):
+        if userOpts is None:
+            userOpts = {}
         self.sf = sfc
         self.results = self.tempStorage()
         self.keywords = None
@@ -179,6 +176,9 @@ class sfp_socialprofiles(SpiderFootPlugin):
                 self.__dataSource__ = "Google"
 
             if self.opts["method"].lower() == "bing":
+                self.error("Bing Search APIs were retired on 2025-08-11; please use Google Custom Search.")
+                self.errorState = True
+                return
                 res = self.sf.bingIterate(
                     searchString=searchStr,
                     opts={

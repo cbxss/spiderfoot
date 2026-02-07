@@ -28,8 +28,8 @@ class sfp_twilio(SpiderFootPlugin):
             'website': "https://www.twilio.com/",
             'model': "FREE_AUTH_LIMITED",
             'references': [
-                "https://www.twilio.com/docs/all",
-                "https://www.twilio.com/blog/what-does-twilio-do"
+                "https://www.twilio.com/docs/lookup/api/v2/phone-numbers",
+                "https://www.twilio.com/docs/lookup/api/v2/phone-numbers/caller-name"
             ],
             'apiKeyInstructions': [
                 "Visit https://www.twilio.com",
@@ -58,7 +58,9 @@ class sfp_twilio(SpiderFootPlugin):
     results = None
     errorState = False
 
-    def setup(self, sfc, userOpts=dict()):
+    def setup(self, sfc, userOpts=None):
+        if userOpts is None:
+            userOpts = {}
         self.sf = sfc
         self.results = self.tempStorage()
 
@@ -83,7 +85,7 @@ class sfp_twilio(SpiderFootPlugin):
         }
 
         res = self.sf.fetchUrl(
-            f"https://lookups.twilio.com/v1/PhoneNumbers/{phoneNumber}?Type=caller-name",
+            f"https://lookups.twilio.com/v2/PhoneNumbers/{phoneNumber}?Fields=caller_name",
             headers=headers,
             timeout=15,
             useragent=self.opts['_useragent']

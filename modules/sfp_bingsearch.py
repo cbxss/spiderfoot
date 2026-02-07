@@ -22,15 +22,13 @@ class sfp_bingsearch(SpiderFootPlugin):
         'categories': ["Search Engines"],
         'dataSource': {
             'website': "https://www.bing.com/",
-            'model': "FREE_AUTH_LIMITED",
+            'model': "RETIRED",
             'references': [
-                "https://docs.microsoft.com/en-us/azure/cognitive-services/bing-web-search/"
+                "https://learn.microsoft.com/en-us/azure/cognitive-services/bing-web-search/",
+                "https://learn.microsoft.com/en-us/answers/questions/1431823/bing-search-apis-retirement-date"
             ],
             'apiKeyInstructions': [
-                "Visit https://azure.microsoft.com/en-in/services/cognitive-services/bing-web-search-api/",
-                "Register a free account",
-                "Select on Bing Custom Search",
-                "The API keys are listed under 'Key1' and 'Key2' (both should work)"
+                "Bing Search APIs were retired on 2025-08-11. This module no longer works."
             ],
             'favIcon': "https://www.bing.com/sa/simg/bing_p_rr_teal_min.ico",
             'logo': "https://www.bing.com/sa/simg/bing_p_rr_teal_min.ico",
@@ -54,7 +52,9 @@ class sfp_bingsearch(SpiderFootPlugin):
     results = None
     errorState = False
 
-    def setup(self, sfc, userOpts=dict()):
+    def setup(self, sfc, userOpts=None):
+        if userOpts is None:
+            userOpts = {}
         self.sf = sfc
         self.results = self.tempStorage()
         self.errorState = False
@@ -81,6 +81,10 @@ class sfp_bingsearch(SpiderFootPlugin):
             return
 
         self.debug(f"Received event, {eventName}, from {srcModuleName}")
+
+        self.error("Bing Search APIs were retired on 2025-08-11; this module is no longer supported.")
+        self.errorState = True
+        return
 
         if self.opts['api_key'] == "":
             self.error("You enabled sfp_bingsearch but did not set a Bing API key!")

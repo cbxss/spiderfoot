@@ -71,10 +71,10 @@ class TestSpiderFoot(unittest.TestCase):
     def test_optValueToData_argument_val_filename_should_return_file_contents_as_string(self):
         sf = SpiderFoot(self.default_options)
 
-        test_string = "@VERSION"
+        test_string = "@pyproject.toml"
         opt_data = sf.optValueToData(test_string)
         self.assertIsInstance(opt_data, str)
-        self.assertTrue(opt_data.startswith("SpiderFoot"))
+        self.assertIn("spiderfoot", opt_data)
 
     def test_optValueToData_argument_val_invalid_type_should_return_None(self):
         sf = SpiderFoot(self.default_options)

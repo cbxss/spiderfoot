@@ -42,7 +42,9 @@ class sfp_dnsneighbor(SpiderFootPlugin):
     domresults = None
     hostresults = None
 
-    def setup(self, sfc, userOpts=dict()):
+    def setup(self, sfc, userOpts=None):
+        if userOpts is None:
+            userOpts = {}
         self.sf = sfc
         self.events = self.tempStorage()
         self.domresults = self.tempStorage()

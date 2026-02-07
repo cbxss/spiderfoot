@@ -14,340 +14,416 @@ import html
 import json
 import logging
 import multiprocessing as mp
+import os
 import random
-import string
+import re
 import time
 from copy import deepcopy
-from io import BytesIO, StringIO
+from io import StringIO
 from operator import itemgetter
+from typing import Optional
 
-import cherrypy
-from cherrypy import _cperror
-
-from mako.lookup import TemplateLookup
-from mako.template import Template
-
-import openpyxl
+from fastapi import FastAPI, Form, Query, Request, UploadFile, File
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 import secure
 
 from sflib import SpiderFoot
-
-from sfscan import startSpiderFootScanner
-
-from spiderfoot import SpiderFootDb
-from spiderfoot import SpiderFootHelpers
-from spiderfoot import __version__
+from spiderfoot import SpiderFootDb, SpiderFootHelpers, __version__
+from spiderfoot.services import (
+    ScanService, ConfigService, DataService,
+    build_excel, clean_user_input,
+)
 from spiderfoot.logger import logListenerSetup, logWorkerSetup
 
 mp.set_start_method("spawn", force=True)
 
+# Footer messages displayed randomly
+FOOTER_MESSAGES = [
+    "<i class='glyphicon glyphicon-flash'></i>&nbsp;&nbsp;<a target=_new href='https://www.spiderfoot.net/hx'>Create a (free) SpiderFoot HX account in seconds and try it out for yourself.</a>",
+    "<i class='glyphicon glyphicon-flash'></i>&nbsp;&nbsp;<a target=_new href='https://www.spiderfoot.net/open-source-vs-hx'>Learn about the difference between SpiderFoot and SpiderFoot HX.</a>",
+    "<i class='glyphicon glyphicon-heart'></i>&nbsp;&nbsp;<a target=_new href='https://twitter.com/intent/follow?original_referer=https%3A%2F%2Fpublish.twitter.com%2F&ref_src=twsrc%5Etfw%7Ctwcamp%5Ebuttonembed%7Ctwterm%5Efollow%7Ctwgr%5Espiderfoot&screen_name=spiderfoot'>Follow SpiderFoot on Twitter for the latest updates.</a>",
+    "<i class='glyphicon glyphicon-education'></i>&nbsp;&nbsp;<a target=_new href='https://www.spiderfoot.net/documentation'>Check out the SpiderFoot documentation to get more out of SpiderFoot.</a>",
+    "<i class='glyphicon glyphicon-heart'></i>&nbsp;&nbsp;<a target=_new href='https://discord.gg/vyvztrG'>Join the SpiderFoot community Discord!</a>",
+    "<i class='glyphicon glyphicon-console'></i>&nbsp;&nbsp;<a target=_new href='https://asciinema.org/~spiderfoot'>Did you know SpiderFoot also has a CLI? Check out our asciinema tutorials on how to use it.</a>",
+    "<i class='glyphicon glyphicon-flash'></i>&nbsp;&nbsp;<a target=_new href='https://www.spiderfoot.net/hx'>Want more OSINT automation capabilities? Check out SpiderFoot HX.</a>",
+    "<i class='glyphicon glyphicon-cloud'></i>&nbsp;&nbsp;<a target=_new href='https://www.spiderfoot.net/hx'>Don't want to manage your SpiderFoot installation yourself? Check out SpiderFoot HX.</a>",
+    "<i class='glyphicon glyphicon-film'></i>&nbsp;&nbsp;<a target=_new href='https://www.youtube.com/channel/UCujtHhVLNeiJA_3F-lghD-w'>Check out our YouTube channel to see SpiderFoot HX in action.</a>",
+]
 
-class SpiderFootWebUi:
-    """SpiderFoot web interface."""
 
-    lookup = TemplateLookup(directories=[''])
-    defaultConfig = dict()
-    config = dict()
-    token = None
-    docroot = ''
+def _urlize_step(text):
+    """Custom Jinja2 filter to convert URLs in text to HTML links."""
+    return re.sub(
+        r'(https?://[^\s<>"\']+)',
+        r'<a href="\1" target="_blank">\1</a>',
+        str(text)
+    )
 
-    def __init__(self: 'SpiderFootWebUi', web_config: dict, config: dict, loggingQueue: 'logging.handlers.QueueListener' = None) -> None:
-        """Initialize web server.
 
-        Args:
-            web_config (dict): config settings for web interface (interface, port, root path)
-            config (dict): SpiderFoot config
-            loggingQueue: TBD
+def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
+    """Create and configure the FastAPI application.
 
-        Raises:
-            TypeError: arg type is invalid
-            ValueError: arg value is invalid
-        """
-        if not isinstance(config, dict):
-            raise TypeError(f"config is {type(config)}; expected dict()")
-        if not config:
-            raise ValueError("config is empty")
+    Args:
+        web_config: config settings for web interface (interface, port, root path)
+        config: SpiderFoot config
+        logging_queue: main SpiderFoot logging queue
 
-        if not isinstance(web_config, dict):
-            raise TypeError(f"web_config is {type(web_config)}; expected dict()")
-        if not config:
-            raise ValueError("web_config is empty")
+    Returns:
+        FastAPI: configured application instance
+    """
+    if not isinstance(config, dict):
+        raise TypeError(f"config is {type(config)}; expected dict()")
+    if not config:
+        raise ValueError("config is empty")
 
-        self.docroot = web_config.get('root', '/').rstrip('/')
+    if not isinstance(web_config, dict):
+        raise TypeError(f"web_config is {type(web_config)}; expected dict()")
 
-        # 'config' supplied will be the defaults, let's supplement them
-        # now with any configuration which may have previously been saved.
-        self.defaultConfig = deepcopy(config)
-        dbh = SpiderFootDb(self.defaultConfig, init=True)
-        sf = SpiderFoot(self.defaultConfig)
-        self.config = sf.configUnserialize(dbh.configGet(), self.defaultConfig)
+    docroot = web_config.get('root', '/').rstrip('/')
 
-        # Set up logging
-        if loggingQueue is None:
-            self.loggingQueue = mp.Queue()
-            logListenerSetup(self.loggingQueue, self.config)
-        else:
-            self.loggingQueue = loggingQueue
-        logWorkerSetup(self.loggingQueue)
-        self.log = logging.getLogger(f"spiderfoot.{__name__}")
+    # Supplement defaults with saved configuration
+    default_config = deepcopy(config)
+    dbh = SpiderFootDb(default_config, init=True)
+    sf = SpiderFoot(default_config)
+    app_config = sf.configUnserialize(dbh.configGet(), default_config)
 
-        cherrypy.config.update({
-            'error_page.401': self.error_page_401,
-            'error_page.404': self.error_page_404,
-            'request.error_response': self.error_page
-        })
+    # Set up logging
+    if logging_queue is None:
+        logging_queue = mp.Queue()
+        logListenerSetup(logging_queue, app_config)
+    logWorkerSetup(logging_queue)
+    # Initialize services
+    scan_service = ScanService(app_config, default_config, logging_queue)
+    config_service = ConfigService(app_config, default_config)
+    data_service = DataService(app_config)
 
-        csp = (
-            secure.ContentSecurityPolicy()
-            .default_src("'self'")
-            .script_src("'self'", "'unsafe-inline'", "blob:")
-            .style_src("'self'", "'unsafe-inline'")
-            .base_uri("'self'")
-            .connect_src("'self'", "data:")
-            .frame_src("'self'", 'data:')
-            .img_src("'self'", "data:")
-        )
+    # Build security headers
+    csp = (
+        secure.ContentSecurityPolicy()
+        .default_src("'self'")
+        .script_src("'self'", "'unsafe-inline'", "blob:")
+        .style_src("'self'", "'unsafe-inline'")
+        .base_uri("'self'")
+        .connect_src("'self'", "data:")
+        .frame_src("'self'", 'data:')
+        .img_src("'self'", "data:")
+    )
 
-        secure_headers = secure.Secure(
-            server=secure.Server().set("server"),
-            cache=secure.CacheControl().must_revalidate(),
-            csp=csp,
-            referrer=secure.ReferrerPolicy().no_referrer(),
-        )
+    secure_headers = secure.Secure(
+        server=secure.Server().set("server"),
+        cache=secure.CacheControl().must_revalidate(),
+        csp=csp,
+        referrer=secure.ReferrerPolicy().no_referrer(),
+    )
 
-        cherrypy.config.update({
-            "tools.response_headers.on": True,
-            "tools.response_headers.headers": list(secure_headers.headers.items())
-        })
+    app = FastAPI(title="SpiderFoot", version=__version__, docs_url=None, redoc_url=None)
 
-    def error_page(self: 'SpiderFootWebUi') -> None:
-        """Error page."""
-        cherrypy.response.status = 500
+    # Security headers middleware
+    @app.middleware("http")
+    async def add_security_headers(request: Request, call_next):
+        response = await call_next(request)
+        secure_headers.set_headers(response)
+        return response
 
-        if self.config.get('_debug'):
-            cherrypy.response.body = _cperror.get_error_page(status=500, traceback=_cperror.format_exc())
-        else:
-            cherrypy.response.body = b"<html><body>Error</body></html>"
+    # Static files
+    static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "spiderfoot", "static")
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-    def error_page_401(self: 'SpiderFootWebUi', status: str, message: str, traceback: str, version: str) -> str:
-        """Unauthorized access HTTP 401 error page.
+    # Templates
+    template_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "spiderfoot", "templates")
+    templates = Jinja2Templates(directory=template_dir)
+    templates.env.filters['urlize_step'] = _urlize_step
 
-        Args:
-            status (str): HTTP response status code and message
-            message (str): Error message
-            traceback (str): Error stack trace
-            version (str): CherryPy version
-
-        Returns:
-            str: HTML response
-        """
-        return ""
-
-    def error_page_404(self: 'SpiderFootWebUi', status: str, message: str, traceback: str, version: str) -> str:
-        """Not found error page 404.
-
-        Args:
-            status (str): HTTP response status code and message
-            message (str): Error message
-            traceback (str): Error stack trace
-            version (str): CherryPy version
-
-        Returns:
-            str: HTTP response template
-        """
-        templ = Template(filename='spiderfoot/templates/error.tmpl', lookup=self.lookup)
-        return templ.render(message='Not Found', docroot=self.docroot, status=status, version=__version__)
-
-    def jsonify_error(self: 'SpiderFootWebUi', status: str, message: str) -> dict:
-        """Jsonify error response.
-
-        Args:
-            status (str): HTTP response status code and message
-            message (str): Error message
-
-        Returns:
-            dict: HTTP error response template
-        """
-        cherrypy.response.headers['Content-Type'] = 'application/json'
-        cherrypy.response.status = status
-        return {
-            'error': {
-                'http_status': status,
-                'message': message,
-            }
+    def _tpl_ctx(request: Request, **kwargs):
+        """Build common template context."""
+        ctx = {
+            "request": request,
+            "docroot": docroot,
+            "version": __version__,
+            "footer_message": random.choice(FOOTER_MESSAGES),
         }
+        ctx.update(kwargs)
+        return ctx
 
-    def error(self: 'SpiderFootWebUi', message: str) -> None:
-        """Show generic error page with error message.
+    def _error_page(request: Request, message: str):
+        return templates.TemplateResponse("error.html", _tpl_ctx(request, message=message))
 
-        Args:
-            message (str): error message
+    # =====================================================================
+    # HTML PAGES
+    # =====================================================================
 
-        Returns:
-            None
-        """
-        templ = Template(filename='spiderfoot/templates/error.tmpl', lookup=self.lookup)
-        return templ.render(message=message, docroot=self.docroot, version=__version__)
+    @app.get("/", response_class=HTMLResponse)
+    async def index(request: Request):
+        return templates.TemplateResponse("scanlist.html", _tpl_ctx(request, pageid="SCANLIST"))
 
-    def cleanUserInput(self: 'SpiderFootWebUi', inputList: list) -> list:
-        """Convert data to HTML entities; except quotes and ampersands.
+    @app.get("/newscan", response_class=HTMLResponse)
+    async def newscan(request: Request):
+        dbh = SpiderFootDb(app_config)
+        types = dbh.eventTypes()
+        return templates.TemplateResponse("newscan.html", _tpl_ctx(
+            request, pageid='NEWSCAN', types=types,
+            modules=app_config['__modules__'], scanname="",
+            selectedmods="", scantarget="",
+        ))
 
-        Args:
-            inputList (list): list of strings to sanitize
+    @app.get("/clonescan", response_class=HTMLResponse)
+    async def clonescan(request: Request, id: str = Query(...)):
+        dbh = SpiderFootDb(app_config)
+        types = dbh.eventTypes()
+        info = dbh.scanInstanceGet(id)
 
-        Returns:
-            list: sanitized input
+        if not info:
+            return _error_page(request, "Invalid scan ID.")
 
-        Raises:
-            TypeError: inputList type was invalid
+        scanconfig = dbh.scanConfigGet(id)
+        scanname = info[0]
+        scantarget = info[1]
 
-        Todo:
-            Review all uses of this function, then remove it.
-            Use of this function is overloaded.
-        """
-        if not isinstance(inputList, list):
-            raise TypeError(f"inputList is {type(inputList)}; expected list()")
+        if scanname == "" or scantarget == "" or len(scanconfig) == 0:
+            return _error_page(request, "Something went wrong internally.")
 
-        ret = list()
+        target_type = SpiderFootHelpers.targetTypeFromString(scantarget)
+        if target_type is None:
+            scantarget = "&quot;" + scantarget + "&quot;"
 
-        for item in inputList:
-            if not item:
-                ret.append('')
-                continue
-            c = html.escape(item, True)
+        modlist = scanconfig['_modulesenabled'].split(',')
 
-            # Decode '&' and '"' HTML entities
-            c = c.replace("&amp;", "&").replace("&quot;", "\"")
-            ret.append(c)
+        return templates.TemplateResponse("newscan.html", _tpl_ctx(
+            request, pageid='NEWSCAN', types=types,
+            modules=app_config['__modules__'], selectedmods=modlist,
+            scanname=str(scanname), scantarget=str(scantarget),
+        ))
 
-        return ret
+    @app.get("/scaninfo", response_class=HTMLResponse)
+    async def scaninfo_page(request: Request, id: str = Query(...)):
+        dbh = SpiderFootDb(app_config)
+        res = dbh.scanInstanceGet(id)
+        if res is None:
+            return _error_page(request, "Scan ID not found.")
 
-    def searchBase(self: 'SpiderFootWebUi', id: str = None, eventType: str = None, value: str = None) -> list:
-        """Search.
+        return templates.TemplateResponse("scaninfo.html", _tpl_ctx(
+            request, id=id, name=html.escape(res[0]), status=res[5], pageid="SCANLIST",
+        ))
 
-        Args:
-            id (str): scan ID
-            eventType (str): TBD
-            value (str): TBD
+    @app.get("/opts", response_class=HTMLResponse)
+    async def opts_page(request: Request, updated: str = None):
+        config_service.token = random.SystemRandom().randint(0, 99999999)
+        return templates.TemplateResponse("opts.html", _tpl_ctx(
+            request, opts=app_config, pageid='SETTINGS',
+            token=config_service.token, updated=updated,
+        ))
 
-        Returns:
-            list: search results
-        """
-        retdata = []
+    # =====================================================================
+    # SCAN API ENDPOINTS
+    # =====================================================================
 
-        if not id and not eventType and not value:
-            return retdata
+    @app.post("/startscan")
+    async def startscan(
+        request: Request,
+        scanname: str = Form(""),
+        scantarget: str = Form(""),
+        modulelist: str = Form(""),
+        typelist: str = Form(""),
+        usecase: str = Form(""),
+    ):
+        success, message, scan_id = scan_service.start_scan(scanname, scantarget, modulelist, typelist, usecase)
 
-        if not value:
-            value = ''
+        if not success:
+            accept = request.headers.get('Accept', '')
+            if 'application/json' in accept:
+                return JSONResponse(["ERROR", message])
+            return _error_page(request, message)
 
-        regex = ""
-        if value.startswith("/") and value.endswith("/"):
-            regex = value[1:len(value) - 1]
-            value = ""
+        accept = request.headers.get('Accept', '')
+        if 'application/json' in accept:
+            return JSONResponse(["SUCCESS", scan_id])
 
-        value = value.replace('*', '%')
-        if value in [None, ""] and regex in [None, ""]:
-            value = "%"
-            regex = ""
+        return RedirectResponse(url=f"{docroot}/scaninfo?id={scan_id}", status_code=302)
 
-        dbh = SpiderFootDb(self.config)
-        criteria = {
-            'scan_id': id or '',
-            'type': eventType or '',
-            'value': value or '',
-            'regex': regex or '',
-        }
+    @app.get("/stopscan")
+    async def stopscan(id: str = Query("")):
+        success, error_code, message = scan_service.stop_scan(id)
+        if not success:
+            return JSONResponse({'error': {'http_status': error_code, 'message': message}}, status_code=int(error_code))
+        return JSONResponse("")
 
+    @app.get("/scandelete")
+    async def scandelete(id: str = Query("")):
+        success, error_code, message = scan_service.delete_scan(id)
+        if not success:
+            return JSONResponse({'error': {'http_status': error_code, 'message': message}}, status_code=int(error_code))
+        return JSONResponse("")
+
+    @app.get("/rerunscan")
+    async def rerunscan(request: Request, id: str = Query(...)):
+        success, message, new_scan_id = scan_service.rerun_scan(id)
+        if not success:
+            return _error_page(request, message)
+        return RedirectResponse(url=f"{docroot}/scaninfo?id={new_scan_id}", status_code=302)
+
+    @app.get("/rerunscanmulti")
+    async def rerunscanmulti(request: Request, ids: str = Query(...)):
+        for scan_id in ids.split(","):
+            success, message, new_scan_id = scan_service.rerun_scan(scan_id)
+            if not success:
+                return _error_page(request, message)
+        return templates.TemplateResponse("scanlist.html", _tpl_ctx(request, rerunscans=True, pageid="SCANLIST"))
+
+    # =====================================================================
+    # DATA PROVIDER ENDPOINTS (JSON)
+    # =====================================================================
+
+    @app.get("/scanlist")
+    async def scanlist():
+        return JSONResponse(scan_service.list_scans())
+
+    @app.get("/scanstatus")
+    async def scanstatus(id: str = Query(...)):
+        return JSONResponse(scan_service.scan_status(id))
+
+    @app.get("/scansummary")
+    async def scansummary(id: str = Query(...), by: str = Query(...)):
+        return JSONResponse(scan_service.scan_summary(id, by))
+
+    @app.get("/scancorrelations")
+    async def scancorrelations(id: str = Query(...)):
+        return JSONResponse(scan_service.scan_correlations(id))
+
+    @app.get("/scaneventresults")
+    @app.post("/scaneventresults")
+    async def scaneventresults(
+        request: Request,
+        id: str = Query(None),
+        eventType: str = Query(None),
+        filterfp: bool = Query(False),
+        correlationId: str = Query(None),
+    ):
+        # Support POST form data (used by sfcli.py)
+        if request.method == "POST":
+            form = await request.form()
+            id = form.get("id", id)
+            eventType = form.get("eventType", eventType)
+            filterfp = bool(form.get("filterfp", filterfp))
+            correlationId = form.get("correlationId", correlationId)
+        return JSONResponse(scan_service.scan_event_results(id, eventType, filterfp, correlationId))
+
+    @app.get("/scaneventresultsunique")
+    @app.post("/scaneventresultsunique")
+    async def scaneventresultsunique(
+        request: Request,
+        id: str = Query(None),
+        eventType: str = Query(None),
+        filterfp: bool = Query(False),
+    ):
+        if request.method == "POST":
+            form = await request.form()
+            id = form.get("id", id)
+            eventType = form.get("eventType", eventType)
+            filterfp = bool(form.get("filterfp", filterfp))
+        return JSONResponse(scan_service.scan_event_results_unique(id, eventType, filterfp))
+
+    @app.get("/scanopts")
+    @app.post("/scanopts")
+    async def scanopts(request: Request, id: str = Query(None)):
+        if request.method == "POST":
+            form = await request.form()
+            id = form.get("id", id)
+        return JSONResponse(scan_service.scan_config(id))
+
+    @app.get("/scanlog")
+    @app.post("/scanlog")
+    async def scanlog(
+        request: Request,
+        id: str = Query(None),
+        limit: str = Query(None),
+        rowId: str = Query(None),
+        reverse: str = Query(None),
+    ):
+        if request.method == "POST":
+            form = await request.form()
+            id = form.get("id", id)
+            limit = form.get("limit", limit)
+            rowId = form.get("rowId", rowId)
+            reverse = form.get("reverse", reverse)
+        return JSONResponse(scan_service.scan_logs(id, limit, rowId, reverse))
+
+    @app.get("/scanerrors")
+    @app.post("/scanerrors")
+    async def scanerrors(request: Request, id: str = Query(None), limit: str = Query(None)):
+        if request.method == "POST":
+            form = await request.form()
+            id = form.get("id", id)
+            limit = form.get("limit", limit)
+        return JSONResponse(scan_service.scan_errors(id, limit))
+
+    @app.get("/scanhistory")
+    async def scanhistory(id: str = Query(None)):
+        if not id:
+            return JSONResponse({'error': {'http_status': '404', 'message': 'No scan specified'}}, status_code=404)
+        return JSONResponse(scan_service.scan_history(id))
+
+    @app.get("/scanelementtypediscovery")
+    @app.post("/scanelementtypediscovery")
+    async def scanelementtypediscovery(request: Request, id: str = Query(None), eventType: str = Query(None)):
+        if request.method == "POST":
+            form = await request.form()
+            id = form.get("id", id)
+            eventType = form.get("eventType", eventType)
+        return JSONResponse(scan_service.scan_element_type_discovery(id, eventType))
+
+    # =====================================================================
+    # SEARCH
+    # =====================================================================
+
+    @app.get("/search")
+    @app.post("/search")
+    async def search(
+        request: Request,
+        id: str = Query(None),
+        eventType: str = Query(None),
+        value: str = Query(None),
+    ):
+        if request.method == "POST":
+            form = await request.form()
+            id = form.get("id", id)
+            eventType = form.get("eventType", eventType)
+            value = form.get("value", value)
         try:
-            data = dbh.search(criteria)
+            return JSONResponse(data_service.search(id, eventType, value))
         except Exception:
-            return retdata
+            return JSONResponse([])
 
-        for row in data:
-            lastseen = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row[0]))
-            escapeddata = html.escape(row[1])
-            escapedsrc = html.escape(row[2])
-            retdata.append([lastseen, escapeddata, escapedsrc,
-                            row[3], row[5], row[6], row[7], row[8], row[10],
-                            row[11], row[4], row[13], row[14]])
+    # =====================================================================
+    # FALSE POSITIVE
+    # =====================================================================
 
-        return retdata
+    @app.post("/resultsetfp")
+    async def resultsetfp(
+        request: Request,
+        id: str = Form(""),
+        resultids: str = Form(""),
+        fp: str = Form(""),
+    ):
+        status, message = scan_service.set_false_positive(id, resultids, fp)
+        return JSONResponse([status, message])
 
-    def buildExcel(self: 'SpiderFootWebUi', data: list, columnNames: list, sheetNameIndex: int = 0) -> str:
-        """Convert supplied raw data into GEXF (Graph Exchange XML Format) format (e.g. for Gephi).
+    # =====================================================================
+    # EXPORT ENDPOINTS
+    # =====================================================================
 
-        Args:
-            data (list): Scan result as list
-            columnNames (list): column names
-            sheetNameIndex (int): TBD
-
-        Returns:
-            str: Excel workbook
-        """
-        rowNums = dict()
-        workbook = openpyxl.Workbook()
-        defaultSheet = workbook.active
-        columnNames.pop(sheetNameIndex)
-        allowed_sheet_chars = string.ascii_uppercase + string.digits + '_'
-        for row in data:
-            sheetName = "".join([c for c in str(row.pop(sheetNameIndex)) if c.upper() in allowed_sheet_chars])
-            try:
-                sheet = workbook[sheetName]
-            except KeyError:
-                # Create sheet
-                workbook.create_sheet(sheetName)
-                sheet = workbook[sheetName]
-                # Write headers
-                for col_num, column_title in enumerate(columnNames, 1):
-                    cell = sheet.cell(row=1, column=col_num)
-                    cell.value = column_title
-                rowNums[sheetName] = 2
-
-            # Write row
-            for col_num, cell_value in enumerate(row, 1):
-                cell = sheet.cell(row=rowNums[sheetName], column=col_num)
-                cell.value = cell_value
-
-            rowNums[sheetName] += 1
-
-        if rowNums:
-            workbook.remove(defaultSheet)
-
-        # Sort sheets alphabetically
-        workbook._sheets.sort(key=lambda ws: ws.title)
-
-        # Save workbook
-        with BytesIO() as f:
-            workbook.save(f)
-            f.seek(0)
-            return f.read()
-
-    #
-    # USER INTERFACE PAGES
-    #
-
-    @cherrypy.expose
-    def scanexportlogs(self: 'SpiderFootWebUi', id: str, dialect: str = "excel") -> bytes:
-        """Get scan log
-
-        Args:
-            id (str): scan ID
-            dialect (str): CSV dialect (default: excel)
-
-        Returns:
-            bytes: scan logs in CSV format
-        """
-        dbh = SpiderFootDb(self.config)
-
+    @app.get("/scanexportlogs")
+    async def scanexportlogs(id: str = Query(...), dialect: str = Query("excel")):
+        dbh = SpiderFootDb(app_config)
         try:
             data = dbh.scanLogs(id, None, None, True)
         except Exception:
-            return self.error("Scan ID not found.")
+            return Response("Scan ID not found.", media_type="text/html")
 
         if not data:
-            return self.error("Scan ID not found.")
+            return Response("Scan ID not found.", media_type="text/html")
 
         fileobj = StringIO()
         parser = csv.writer(fileobj, dialect=dialect)
@@ -355,101 +431,27 @@ class SpiderFootWebUi:
         for row in data:
             parser.writerow([
                 time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row[0] / 1000)),
-                str(row[1]),
-                str(row[2]),
-                str(row[3]),
-                row[4]
+                str(row[1]), str(row[2]), str(row[3]), row[4]
             ])
 
-        cherrypy.response.headers['Content-Disposition'] = f"attachment; filename=SpiderFoot-{id}.log.csv"
-        cherrypy.response.headers['Content-Type'] = "application/csv"
-        cherrypy.response.headers['Pragma'] = "no-cache"
-        return fileobj.getvalue().encode('utf-8')
+        return Response(
+            content=fileobj.getvalue().encode('utf-8'),
+            media_type="application/csv",
+            headers={
+                'Content-Disposition': f"attachment; filename=SpiderFoot-{id}.log.csv",
+                'Pragma': 'no-cache',
+            },
+        )
 
-    @cherrypy.expose
-    def scancorrelationsexport(self: 'SpiderFootWebUi', id: str, filetype: str = "csv", dialect: str = "excel") -> str:
-        """Get scan correlation data in CSV or Excel format.
-
-        Args:
-            id (str): scan ID
-            filetype (str): type of file ("xlsx|excel" or "csv")
-            dialect (str): CSV dialect (default: excel)
-
-        Returns:
-            str: results in CSV or Excel format
-        """
-        dbh = SpiderFootDb(self.config)
-
-        try:
-            scaninfo = dbh.scanInstanceGet(id)
-            scan_name = scaninfo[0]
-        except Exception:
-            return json.dumps(["ERROR", "Could not retrieve info for scan."]).encode('utf-8')
-
-        try:
-            correlations = dbh.scanCorrelationList(id)
-        except Exception:
-            return json.dumps(["ERROR", "Could not retrieve correlations for scan."]).encode('utf-8')
-
-        headings = ["Rule Name", "Correlation", "Risk", "Description"]
-
-        if filetype.lower() in ["xlsx", "excel"]:
-            rows = []
-            for row in correlations:
-                correlation = row[1]
-                rule_name = row[2]
-                rule_risk = row[3]
-                rule_description = row[5]
-                rows.append([rule_name, correlation, rule_risk, rule_description])
-
-            if scan_name:
-                fname = f"{scan_name}-SpiderFoot-correlations.xlxs"
-            else:
-                fname = "SpiderFoot-correlations.xlxs"
-
-            cherrypy.response.headers['Content-Disposition'] = f"attachment; filename={fname}"
-            cherrypy.response.headers['Content-Type'] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            cherrypy.response.headers['Pragma'] = "no-cache"
-            return self.buildExcel(rows, headings, sheetNameIndex=0)
-
-        if filetype.lower() == 'csv':
-            fileobj = StringIO()
-            parser = csv.writer(fileobj, dialect=dialect)
-            parser.writerow(headings)
-
-            for row in correlations:
-                correlation = row[1]
-                rule_name = row[2]
-                rule_risk = row[3]
-                rule_description = row[5]
-                parser.writerow([rule_name, correlation, rule_risk, rule_description])
-
-            if scan_name:
-                fname = f"{scan_name}-SpiderFoot-correlations.csv"
-            else:
-                fname = "SpiderFoot-correlations.csv"
-
-            cherrypy.response.headers['Content-Disposition'] = f"attachment; filename={fname}"
-            cherrypy.response.headers['Content-Type'] = "application/csv"
-            cherrypy.response.headers['Pragma'] = "no-cache"
-            return fileobj.getvalue().encode('utf-8')
-
-        return self.error("Invalid export filetype.")
-
-    @cherrypy.expose
-    def scaneventresultexport(self: 'SpiderFootWebUi', id: str, type: str, filetype: str = "csv", dialect: str = "excel") -> str:
-        """Get scan event result data in CSV or Excel format
-
-        Args:
-            id (str): scan ID
-            type (str): TBD
-            filetype (str): type of file ("xlsx|excel" or "csv")
-            dialect (str): CSV dialect (default: excel)
-
-        Returns:
-            str: results in CSV or Excel format
-        """
-        dbh = SpiderFootDb(self.config)
+    @app.get("/scaneventresultexport")
+    async def scaneventresultexport(
+        request: Request,
+        id: str = Query(...),
+        type: str = Query("ALL"),
+        filetype: str = Query("csv"),
+        dialect: str = Query("excel"),
+    ):
+        dbh = SpiderFootDb(app_config)
         data = dbh.scanResultEvent(id, type)
 
         if filetype.lower() in ["xlsx", "excel"]:
@@ -461,12 +463,14 @@ class SpiderFootWebUi:
                 datafield = str(row[1]).replace("<SFURL>", "").replace("</SFURL>", "")
                 rows.append([lastseen, str(row[4]), str(row[3]), str(row[2]), row[13], datafield])
 
-            fname = "SpiderFoot.xlsx"
-            cherrypy.response.headers['Content-Disposition'] = f"attachment; filename={fname}"
-            cherrypy.response.headers['Content-Type'] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            cherrypy.response.headers['Pragma'] = "no-cache"
-            return self.buildExcel(rows, ["Updated", "Type", "Module", "Source",
-                                   "F/P", "Data"], sheetNameIndex=1)
+            return Response(
+                content=build_excel(rows, ["Updated", "Type", "Module", "Source", "F/P", "Data"], sheet_name_index=1),
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={
+                    'Content-Disposition': "attachment; filename=SpiderFoot.xlsx",
+                    'Pragma': 'no-cache',
+                },
+            )
 
         if filetype.lower() == 'csv':
             fileobj = StringIO()
@@ -479,40 +483,44 @@ class SpiderFootWebUi:
                 datafield = str(row[1]).replace("<SFURL>", "").replace("</SFURL>", "")
                 parser.writerow([lastseen, str(row[4]), str(row[3]), str(row[2]), row[13], datafield])
 
-            fname = "SpiderFoot.csv"
-            cherrypy.response.headers['Content-Disposition'] = f"attachment; filename={fname}"
-            cherrypy.response.headers['Content-Type'] = "application/csv"
-            cherrypy.response.headers['Pragma'] = "no-cache"
-            return fileobj.getvalue().encode('utf-8')
+            return Response(
+                content=fileobj.getvalue().encode('utf-8'),
+                media_type="application/csv",
+                headers={
+                    'Content-Disposition': "attachment; filename=SpiderFoot.csv",
+                    'Pragma': 'no-cache',
+                },
+            )
 
-        return self.error("Invalid export filetype.")
+        return _error_page(request, "Invalid export filetype.")
 
-    @cherrypy.expose
-    def scaneventresultexportmulti(self: 'SpiderFootWebUi', ids: str, filetype: str = "csv", dialect: str = "excel") -> str:
-        """Get scan event result data in CSV or Excel format for multiple scans
+    @app.get("/scaneventresultexportmulti")
+    @app.post("/scaneventresultexportmulti")
+    async def scaneventresultexportmulti(
+        request: Request,
+        ids: str = Query(None),
+        filetype: str = Query("csv"),
+        dialect: str = Query("excel"),
+    ):
+        if request.method == "POST":
+            form = await request.form()
+            ids = form.get("ids", ids)
+            filetype = form.get("filetype", filetype)
 
-        Args:
-            ids (str): comma separated list of scan IDs
-            filetype (str): type of file ("xlsx|excel" or "csv")
-            dialect (str): CSV dialect (default: excel)
-
-        Returns:
-            str: results in CSV or Excel format
-        """
-        dbh = SpiderFootDb(self.config)
-        scaninfo = dict()
-        data = list()
+        dbh = SpiderFootDb(app_config)
+        scaninfo = {}
+        data = []
         scan_name = ""
 
-        for id in ids.split(','):
-            scaninfo[id] = dbh.scanInstanceGet(id)
-            if scaninfo[id] is None:
+        for scan_id in ids.split(','):
+            scaninfo[scan_id] = dbh.scanInstanceGet(scan_id)
+            if scaninfo[scan_id] is None:
                 continue
-            scan_name = scaninfo[id][0]
-            data = data + dbh.scanResultEvent(id)
+            scan_name = scaninfo[scan_id][0]
+            data = data + dbh.scanResultEvent(scan_id)
 
         if not data:
-            return None
+            return Response("", media_type="text/html")
 
         if filetype.lower() in ["xlsx", "excel"]:
             rows = []
@@ -529,11 +537,12 @@ class SpiderFootWebUi:
             else:
                 fname = scan_name + "-SpiderFoot.xlsx"
 
-            cherrypy.response.headers['Content-Disposition'] = f"attachment; filename={fname}"
-            cherrypy.response.headers['Content-Type'] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            cherrypy.response.headers['Pragma'] = "no-cache"
-            return self.buildExcel(rows, ["Scan Name", "Updated", "Type", "Module",
-                                   "Source", "F/P", "Data"], sheetNameIndex=2)
+            return Response(
+                content=build_excel(rows, ["Scan Name", "Updated", "Type", "Module",
+                                    "Source", "F/P", "Data"], sheet_name_index=2),
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={'Content-Disposition': f"attachment; filename={fname}", 'Pragma': 'no-cache'},
+            )
 
         if filetype.lower() == 'csv':
             fileobj = StringIO()
@@ -552,100 +561,132 @@ class SpiderFootWebUi:
             else:
                 fname = scan_name + "-SpiderFoot.csv"
 
-            cherrypy.response.headers['Content-Disposition'] = f"attachment; filename={fname}"
-            cherrypy.response.headers['Content-Type'] = "application/csv"
-            cherrypy.response.headers['Pragma'] = "no-cache"
-            return fileobj.getvalue().encode('utf-8')
+            return Response(
+                content=fileobj.getvalue().encode('utf-8'),
+                media_type="application/csv",
+                headers={'Content-Disposition': f"attachment; filename={fname}", 'Pragma': 'no-cache'},
+            )
 
-        return self.error("Invalid export filetype.")
+        return _error_page(request, "Invalid export filetype.")
 
-    @cherrypy.expose
-    def scansearchresultexport(self: 'SpiderFootWebUi', id: str, eventType: str = None, value: str = None, filetype: str = "csv", dialect: str = "excel") -> str:
-        """Get search result data in CSV or Excel format
-
-        Args:
-            id (str): scan ID
-            eventType (str): TBD
-            value (str): TBD
-            filetype (str): type of file ("xlsx|excel" or "csv")
-            dialect (str): CSV dialect (default: excel)
-
-        Returns:
-            str: results in CSV or Excel format
-        """
-        data = self.searchBase(id, eventType, value)
-
-        if not data:
-            return None
+    @app.get("/scansearchresultexport")
+    async def scansearchresultexport(
+        request: Request,
+        id: str = Query(...),
+        eventType: str = Query(None),
+        value: str = Query(None),
+        filetype: str = Query("csv"),
+        dialect: str = Query("excel"),
+    ):
+        search_data = data_service.search(id, eventType, value)
+        if not search_data:
+            return Response("", media_type="text/html")
 
         if filetype.lower() in ["xlsx", "excel"]:
             rows = []
-            for row in data:
+            for row in search_data:
                 if row[10] == "ROOT":
                     continue
                 datafield = str(row[1]).replace("<SFURL>", "").replace("</SFURL>", "")
                 rows.append([row[0], str(row[10]), str(row[3]), str(row[2]), row[11], datafield])
-            cherrypy.response.headers['Content-Disposition'] = "attachment; filename=SpiderFoot.xlsx"
-            cherrypy.response.headers['Content-Type'] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            cherrypy.response.headers['Pragma'] = "no-cache"
-            return self.buildExcel(rows, ["Updated", "Type", "Module", "Source",
-                                   "F/P", "Data"], sheetNameIndex=1)
+            return Response(
+                content=build_excel(rows, ["Updated", "Type", "Module", "Source", "F/P", "Data"], sheet_name_index=1),
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={'Content-Disposition': "attachment; filename=SpiderFoot.xlsx", 'Pragma': 'no-cache'},
+            )
 
         if filetype.lower() == 'csv':
             fileobj = StringIO()
             parser = csv.writer(fileobj, dialect=dialect)
             parser.writerow(["Updated", "Type", "Module", "Source", "F/P", "Data"])
-            for row in data:
+            for row in search_data:
                 if row[10] == "ROOT":
                     continue
                 datafield = str(row[1]).replace("<SFURL>", "").replace("</SFURL>", "")
                 parser.writerow([row[0], str(row[10]), str(row[3]), str(row[2]), row[11], datafield])
-            cherrypy.response.headers['Content-Disposition'] = "attachment; filename=SpiderFoot.csv"
-            cherrypy.response.headers['Content-Type'] = "application/csv"
-            cherrypy.response.headers['Pragma'] = "no-cache"
-            return fileobj.getvalue().encode('utf-8')
+            return Response(
+                content=fileobj.getvalue().encode('utf-8'),
+                media_type="application/csv",
+                headers={'Content-Disposition': "attachment; filename=SpiderFoot.csv", 'Pragma': 'no-cache'},
+            )
 
-        return self.error("Invalid export filetype.")
+        return _error_page(request, "Invalid export filetype.")
 
-    @cherrypy.expose
-    def scanexportjsonmulti(self: 'SpiderFootWebUi', ids: str) -> str:
-        """Get scan event result data in JSON format for multiple scans.
+    @app.get("/scancorrelationsexport")
+    async def scancorrelationsexport(
+        request: Request,
+        id: str = Query(...),
+        filetype: str = Query("csv"),
+        dialect: str = Query("excel"),
+    ):
+        dbh = SpiderFootDb(app_config)
+        try:
+            scaninfo = dbh.scanInstanceGet(id)
+            scan_name = scaninfo[0]
+        except Exception:
+            return JSONResponse(["ERROR", "Could not retrieve info for scan."])
 
-        Args:
-            ids (str): comma separated list of scan IDs
+        try:
+            correlations = dbh.scanCorrelationList(id)
+        except Exception:
+            return JSONResponse(["ERROR", "Could not retrieve correlations for scan."])
 
-        Returns:
-            str: results in JSON format
-        """
-        dbh = SpiderFootDb(self.config)
-        scaninfo = list()
+        headings = ["Rule Name", "Correlation", "Risk", "Description"]
+
+        if filetype.lower() in ["xlsx", "excel"]:
+            rows = []
+            for row in correlations:
+                rows.append([row[2], row[1], row[3], row[5]])
+            fname = f"{scan_name}-SpiderFoot-correlations.xlsx" if scan_name else "SpiderFoot-correlations.xlsx"
+            return Response(
+                content=build_excel(rows, headings, sheet_name_index=0),
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={'Content-Disposition': f"attachment; filename={fname}", 'Pragma': 'no-cache'},
+            )
+
+        if filetype.lower() == 'csv':
+            fileobj = StringIO()
+            parser = csv.writer(fileobj, dialect=dialect)
+            parser.writerow(headings)
+            for row in correlations:
+                parser.writerow([row[2], row[1], row[3], row[5]])
+            fname = f"{scan_name}-SpiderFoot-correlations.csv" if scan_name else "SpiderFoot-correlations.csv"
+            return Response(
+                content=fileobj.getvalue().encode('utf-8'),
+                media_type="application/csv",
+                headers={'Content-Disposition': f"attachment; filename={fname}", 'Pragma': 'no-cache'},
+            )
+
+        return _error_page(request, "Invalid export filetype.")
+
+    @app.get("/scanexportjsonmulti")
+    @app.post("/scanexportjsonmulti")
+    async def scanexportjsonmulti(request: Request, ids: str = Query(None)):
+        if request.method == "POST":
+            form = await request.form()
+            ids = form.get("ids", ids)
+
+        dbh = SpiderFootDb(app_config)
+        scaninfo = []
         scan_name = ""
 
-        for id in ids.split(','):
-            scan = dbh.scanInstanceGet(id)
-
+        for scan_id in ids.split(','):
+            scan = dbh.scanInstanceGet(scan_id)
             if scan is None:
                 continue
-
             scan_name = scan[0]
 
-            for row in dbh.scanResultEvent(id):
+            for row in dbh.scanResultEvent(scan_id):
                 lastseen = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row[0]))
                 event_data = str(row[1]).replace("<SFURL>", "").replace("</SFURL>", "")
-                source_data = str(row[2])
-                source_module = str(row[3])
-                event_type = row[4]
-                false_positive = row[13]
-
-                if event_type == "ROOT":
+                if row[4] == "ROOT":
                     continue
-
                 scaninfo.append({
                     "data": event_data,
-                    "event_type": event_type,
-                    "module": source_module,
-                    "source_data": source_data,
-                    "false_positive": false_positive,
+                    "event_type": row[4],
+                    "module": str(row[3]),
+                    "source_data": str(row[2]),
+                    "false_positive": row[13],
                     "last_seen": lastseen,
                     "scan_name": scan_name,
                     "scan_target": scan[1]
@@ -656,674 +697,162 @@ class SpiderFootWebUi:
         else:
             fname = scan_name + "-SpiderFoot.json"
 
-        cherrypy.response.headers['Content-Disposition'] = f"attachment; filename={fname}"
-        cherrypy.response.headers['Content-Type'] = "application/json; charset=utf-8"
-        cherrypy.response.headers['Pragma'] = "no-cache"
-        return json.dumps(scaninfo).encode('utf-8')
+        return Response(
+            content=json.dumps(scaninfo).encode('utf-8'),
+            media_type="application/json; charset=utf-8",
+            headers={'Content-Disposition': f"attachment; filename={fname}", 'Pragma': 'no-cache'},
+        )
 
-    @cherrypy.expose
-    def scanviz(self: 'SpiderFootWebUi', id: str, gexf: str = "0") -> str:
-        """Export entities from scan results for visualising.
-
-        Args:
-            id (str): scan ID
-            gexf (str): TBD
-
-        Returns:
-            str: GEXF data
-        """
+    @app.get("/scanviz")
+    async def scanviz(id: str = Query(...), gexf: str = Query("0")):
         if not id:
-            return None
+            return Response("", media_type="text/html")
 
-        dbh = SpiderFootDb(self.config)
+        dbh = SpiderFootDb(app_config)
         data = dbh.scanResultEvent(id, filterFp=True)
         scan = dbh.scanInstanceGet(id)
 
         if not scan:
-            return None
+            return Response("", media_type="text/html")
 
         scan_name = scan[0]
-
         root = scan[1]
 
         if gexf == "0":
-            return SpiderFootHelpers.buildGraphJson([root], data)
+            return JSONResponse(json.loads(SpiderFootHelpers.buildGraphJson([root], data)))
 
-        if not scan_name:
-            fname = "SpiderFoot.gexf"
-        else:
-            fname = scan_name + "SpiderFoot.gexf"
+        fname = (scan_name + "SpiderFoot.gexf") if scan_name else "SpiderFoot.gexf"
+        return Response(
+            content=SpiderFootHelpers.buildGraphGexf([root], "SpiderFoot Export", data),
+            media_type="application/gexf",
+            headers={'Content-Disposition': f"attachment; filename={fname}", 'Pragma': 'no-cache'},
+        )
 
-        cherrypy.response.headers['Content-Disposition'] = f"attachment; filename={fname}"
-        cherrypy.response.headers['Content-Type'] = "application/gexf"
-        cherrypy.response.headers['Pragma'] = "no-cache"
-        return SpiderFootHelpers.buildGraphGexf([root], "SpiderFoot Export", data)
-
-    @cherrypy.expose
-    def scanvizmulti(self: 'SpiderFootWebUi', ids: str, gexf: str = "1") -> str:
-        """Export entities results from multiple scans in GEXF format.
-
-        Args:
-            ids (str): scan IDs
-            gexf (str): TBD
-
-        Returns:
-            str: GEXF data
-        """
-        dbh = SpiderFootDb(self.config)
-        data = list()
-        roots = list()
-        scan_name = ""
+    @app.get("/scanvizmulti")
+    @app.post("/scanvizmulti")
+    async def scanvizmulti(request: Request, ids: str = Query(None), gexf: str = Query("1")):
+        if request.method == "POST":
+            form = await request.form()
+            ids = form.get("ids", ids)
 
         if not ids:
-            return None
+            return Response("", media_type="text/html")
 
-        for id in ids.split(','):
-            scan = dbh.scanInstanceGet(id)
+        dbh = SpiderFootDb(app_config)
+        data = []
+        roots = []
+        scan_name = ""
+
+        for scan_id in ids.split(','):
+            scan = dbh.scanInstanceGet(scan_id)
             if not scan:
                 continue
-            data = data + dbh.scanResultEvent(id, filterFp=True)
+            data = data + dbh.scanResultEvent(scan_id, filterFp=True)
             roots.append(scan[1])
             scan_name = scan[0]
 
         if not data:
-            return None
+            return Response("", media_type="text/html")
 
         if gexf == "0":
-            # Not implemented yet
-            return None
+            return Response("", media_type="text/html")
 
         if len(ids.split(',')) > 1 or scan_name == "":
             fname = "SpiderFoot.gexf"
         else:
             fname = scan_name + "-SpiderFoot.gexf"
 
-        cherrypy.response.headers['Content-Disposition'] = f"attachment; filename={fname}"
-        cherrypy.response.headers['Content-Type'] = "application/gexf"
-        cherrypy.response.headers['Pragma'] = "no-cache"
-        return SpiderFootHelpers.buildGraphGexf(roots, "SpiderFoot Export", data)
+        return Response(
+            content=SpiderFootHelpers.buildGraphGexf(roots, "SpiderFoot Export", data),
+            media_type="application/gexf",
+            headers={'Content-Disposition': f"attachment; filename={fname}", 'Pragma': 'no-cache'},
+        )
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def scanopts(self: 'SpiderFootWebUi', id: str) -> dict:
-        """Return configuration used for the specified scan as JSON.
+    # =====================================================================
+    # CONFIG ENDPOINTS
+    # =====================================================================
 
-        Args:
-            id: scan ID
+    @app.get("/optsraw")
+    async def optsraw():
+        token, data = config_service.get_raw_config()
+        return JSONResponse(['SUCCESS', {'token': token, 'data': data}])
 
-        Returns:
-            dict: scan options for the specified scan
-        """
-        dbh = SpiderFootDb(self.config)
-        ret = dict()
+    @app.get("/optsexport")
+    async def optsexport(pattern: str = Query(None)):
+        content = config_service.export_config(pattern)
+        return Response(
+            content=content,
+            media_type="text/plain",
+            headers={'Content-Disposition': 'attachment; filename="SpiderFoot.cfg"'},
+        )
 
-        meta = dbh.scanInstanceGet(id)
-        if not meta:
-            return ret
-
-        if meta[3] != 0:
-            started = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(meta[3]))
-        else:
-            started = "Not yet"
-
-        if meta[4] != 0:
-            finished = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(meta[4]))
-        else:
-            finished = "Not yet"
-
-        ret['meta'] = [meta[0], meta[1], meta[2], started, finished, meta[5]]
-        ret['config'] = dbh.scanConfigGet(id)
-        ret['configdesc'] = dict()
-        for key in list(ret['config'].keys()):
-            if ':' not in key:
-                globaloptdescs = self.config['__globaloptdescs__']
-                if globaloptdescs:
-                    ret['configdesc'][key] = globaloptdescs.get(key, f"{key} (legacy)")
+    @app.post("/savesettings")
+    async def savesettings(
+        request: Request,
+        allopts: str = Form(""),
+        token: str = Form(""),
+        configFile: Optional[UploadFile] = File(None),
+    ):
+        config_file_contents = None
+        if configFile and configFile.filename:
+            contents = await configFile.read()
+            if isinstance(contents, bytes):
+                config_file_contents = contents.decode('utf-8')
             else:
-                [modName, modOpt] = key.split(':')
-                if modName not in list(self.config['__modules__'].keys()):
-                    continue
-
-                if modOpt not in list(self.config['__modules__'][modName]['optdescs'].keys()):
-                    continue
-
-                ret['configdesc'][key] = self.config['__modules__'][modName]['optdescs'][modOpt]
-
-        return ret
-
-    @cherrypy.expose
-    def rerunscan(self: 'SpiderFootWebUi', id: str) -> None:
-        """Rerun a scan.
-
-        Args:
-            id (str): scan ID
-
-        Returns:
-            None
-
-        Raises:
-            HTTPRedirect: redirect to info page for new scan
-        """
-        # Snapshot the current configuration to be used by the scan
-        cfg = deepcopy(self.config)
-        modlist = list()
-        dbh = SpiderFootDb(cfg)
-        info = dbh.scanInstanceGet(id)
-
-        if not info:
-            return self.error("Invalid scan ID.")
-
-        scanname = info[0]
-        scantarget = info[1]
-
-        scanconfig = dbh.scanConfigGet(id)
-        if not scanconfig:
-            return self.error(f"Error loading config from scan: {id}")
-
-        modlist = scanconfig['_modulesenabled'].split(',')
-        if "sfp__stor_stdout" in modlist:
-            modlist.remove("sfp__stor_stdout")
-
-        targetType = SpiderFootHelpers.targetTypeFromString(scantarget)
-        if not targetType:
-            # It must then be a name, as a re-run scan should always have a clean
-            # target. Put quotes around the target value and try to determine the
-            # target type again.
-            targetType = SpiderFootHelpers.targetTypeFromString(f'"{scantarget}"')
-
-        if targetType not in ["HUMAN_NAME", "BITCOIN_ADDRESS"]:
-            scantarget = scantarget.lower()
-
-        # Start running a new scan
-        scanId = SpiderFootHelpers.genScanInstanceId()
-        try:
-            p = mp.Process(target=startSpiderFootScanner, args=(self.loggingQueue, scanname, scanId, scantarget, targetType, modlist, cfg))
-            p.daemon = True
-            p.start()
-        except Exception as e:
-            self.log.error(f"[-] Scan [{scanId}] failed: {e}")
-            return self.error(f"[-] Scan [{scanId}] failed: {e}")
-
-        # Wait until the scan has initialized
-        while dbh.scanInstanceGet(scanId) is None:
-            self.log.info("Waiting for the scan to initialize...")
-            time.sleep(1)
-
-        raise cherrypy.HTTPRedirect(f"{self.docroot}/scaninfo?id={scanId}", status=302)
-
-    @cherrypy.expose
-    def rerunscanmulti(self: 'SpiderFootWebUi', ids: str) -> str:
-        """Rerun scans.
-
-        Args:
-            ids (str): comma separated list of scan IDs
-
-        Returns:
-            str: Scan list page HTML
-        """
-        # Snapshot the current configuration to be used by the scan
-        cfg = deepcopy(self.config)
-        modlist = list()
-        dbh = SpiderFootDb(cfg)
-
-        for id in ids.split(","):
-            info = dbh.scanInstanceGet(id)
-            if not info:
-                return self.error("Invalid scan ID.")
-
-            scanconfig = dbh.scanConfigGet(id)
-            scanname = info[0]
-            scantarget = info[1]
-            targetType = None
-
-            if len(scanconfig) == 0:
-                return self.error("Something went wrong internally.")
-
-            modlist = scanconfig['_modulesenabled'].split(',')
-            if "sfp__stor_stdout" in modlist:
-                modlist.remove("sfp__stor_stdout")
-
-            targetType = SpiderFootHelpers.targetTypeFromString(scantarget)
-            if targetType is None:
-                # Should never be triggered for a re-run scan..
-                return self.error("Invalid target type. Could not recognize it as a target SpiderFoot supports.")
-
-            # Start running a new scan
-            scanId = SpiderFootHelpers.genScanInstanceId()
-            try:
-                p = mp.Process(target=startSpiderFootScanner, args=(self.loggingQueue, scanname, scanId, scantarget, targetType, modlist, cfg))
-                p.daemon = True
-                p.start()
-            except Exception as e:
-                self.log.error(f"[-] Scan [{scanId}] failed: {e}")
-                return self.error(f"[-] Scan [{scanId}] failed: {e}")
-
-            # Wait until the scan has initialized
-            while dbh.scanInstanceGet(scanId) is None:
-                self.log.info("Waiting for the scan to initialize...")
-                time.sleep(1)
-
-        templ = Template(filename='spiderfoot/templates/scanlist.tmpl', lookup=self.lookup)
-        return templ.render(rerunscans=True, docroot=self.docroot, pageid="SCANLIST", version=__version__)
-
-    @cherrypy.expose
-    def newscan(self: 'SpiderFootWebUi') -> str:
-        """Configure a new scan.
-
-        Returns:
-            str: New scan page HTML
-        """
-        dbh = SpiderFootDb(self.config)
-        types = dbh.eventTypes()
-        templ = Template(filename='spiderfoot/templates/newscan.tmpl', lookup=self.lookup)
-        return templ.render(pageid='NEWSCAN', types=types, docroot=self.docroot,
-                            modules=self.config['__modules__'], scanname="",
-                            selectedmods="", scantarget="", version=__version__)
-
-    @cherrypy.expose
-    def clonescan(self: 'SpiderFootWebUi', id: str) -> str:
-        """Clone an existing scan (pre-selected options in the newscan page).
-
-        Args:
-            id (str): scan ID to clone
-
-        Returns:
-            str: New scan page HTML pre-populated with options from cloned scan.
-        """
-        dbh = SpiderFootDb(self.config)
-        types = dbh.eventTypes()
-        info = dbh.scanInstanceGet(id)
-
-        if not info:
-            return self.error("Invalid scan ID.")
-
-        scanconfig = dbh.scanConfigGet(id)
-        scanname = info[0]
-        scantarget = info[1]
-        targetType = None
-
-        if scanname == "" or scantarget == "" or len(scanconfig) == 0:
-            return self.error("Something went wrong internally.")
-
-        targetType = SpiderFootHelpers.targetTypeFromString(scantarget)
-        if targetType is None:
-            # It must be a name, so wrap quotes around it
-            scantarget = "&quot;" + scantarget + "&quot;"
-
-        modlist = scanconfig['_modulesenabled'].split(',')
-
-        templ = Template(filename='spiderfoot/templates/newscan.tmpl', lookup=self.lookup)
-        return templ.render(pageid='NEWSCAN', types=types, docroot=self.docroot,
-                            modules=self.config['__modules__'], selectedmods=modlist,
-                            scanname=str(scanname),
-                            scantarget=str(scantarget), version=__version__)
-
-    @cherrypy.expose
-    def index(self: 'SpiderFootWebUi') -> str:
-        """Show scan list page.
-
-        Returns:
-            str: Scan list page HTML
-        """
-        templ = Template(filename='spiderfoot/templates/scanlist.tmpl', lookup=self.lookup)
-        return templ.render(pageid='SCANLIST', docroot=self.docroot, version=__version__)
-
-    @cherrypy.expose
-    def scaninfo(self: 'SpiderFootWebUi', id: str) -> str:
-        """Information about a selected scan.
-
-        Args:
-            id (str): scan id
-
-        Returns:
-            str: scan info page HTML
-        """
-        dbh = SpiderFootDb(self.config)
-        res = dbh.scanInstanceGet(id)
-        if res is None:
-            return self.error("Scan ID not found.")
-
-        templ = Template(filename='spiderfoot/templates/scaninfo.tmpl', lookup=self.lookup, input_encoding='utf-8')
-        return templ.render(id=id, name=html.escape(res[0]), status=res[5], docroot=self.docroot, version=__version__,
-                            pageid="SCANLIST")
-
-    @cherrypy.expose
-    def opts(self: 'SpiderFootWebUi', updated: str = None) -> str:
-        """Show module and global settings page.
-
-        Args:
-            updated (str): scan options were updated successfully
-
-        Returns:
-            str: scan options page HTML
-        """
-        templ = Template(filename='spiderfoot/templates/opts.tmpl', lookup=self.lookup)
-        self.token = random.SystemRandom().randint(0, 99999999)
-        return templ.render(opts=self.config, pageid='SETTINGS', token=self.token, version=__version__,
-                            updated=updated, docroot=self.docroot)
-
-    @cherrypy.expose
-    def optsexport(self: 'SpiderFootWebUi', pattern: str = None) -> str:
-        """Export configuration.
-
-        Args:
-            pattern (str): TBD
-
-        Returns:
-            str: Configuration settings
-        """
-        sf = SpiderFoot(self.config)
-        conf = sf.configSerialize(self.config)
-        content = ""
-
-        for opt in sorted(conf):
-            if ":_" in opt or opt.startswith("_"):
-                continue
-
-            if pattern:
-                if pattern in opt:
-                    content += f"{opt}={conf[opt]}\n"
-            else:
-                content += f"{opt}={conf[opt]}\n"
-
-        cherrypy.response.headers['Content-Disposition'] = 'attachment; filename="SpiderFoot.cfg"'
-        cherrypy.response.headers['Content-Type'] = "text/plain"
-        return content
-
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def optsraw(self: 'SpiderFootWebUi') -> str:
-        """Return global and module settings as json.
-
-        Returns:
-            str: settings as JSON
-        """
-        ret = dict()
-        self.token = random.SystemRandom().randint(0, 99999999)
-        for opt in self.config:
-            if not opt.startswith('__'):
-                ret["global." + opt] = self.config[opt]
-                continue
-
-            if opt == '__modules__':
-                for mod in sorted(self.config['__modules__'].keys()):
-                    for mo in sorted(self.config['__modules__'][mod]['opts'].keys()):
-                        if mo.startswith("_"):
-                            continue
-                        ret["module." + mod + "." + mo] = self.config['__modules__'][mod]['opts'][mo]
-
-        return ['SUCCESS', {'token': self.token, 'data': ret}]
-
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def scandelete(self: 'SpiderFootWebUi', id: str) -> str:
-        """Delete scan(s).
-
-        Args:
-            id (str): comma separated list of scan IDs
-
-        Returns:
-            str: JSON response
-        """
-        if not id:
-            return self.jsonify_error('404', "No scan specified")
-
-        dbh = SpiderFootDb(self.config)
-        ids = id.split(',')
-
-        for scan_id in ids:
-            res = dbh.scanInstanceGet(scan_id)
-            if not res:
-                return self.jsonify_error('404', f"Scan {scan_id} does not exist")
-
-            if res[5] in ["RUNNING", "STARTING", "STARTED"]:
-                return self.jsonify_error('400', f"Scan {scan_id} is {res[5]}. You cannot delete running scans.")
-
-        for scan_id in ids:
-            dbh.scanInstanceDelete(scan_id)
-
-        return ""
-
-    @cherrypy.expose
-    def savesettings(self: 'SpiderFootWebUi', allopts: str, token: str, configFile: 'cherrypy._cpreqbody.Part' = None) -> None:
-        """Save settings, also used to completely reset them to default.
-
-        Args:
-            allopts: TBD
-            token (str): CSRF token
-            configFile (cherrypy._cpreqbody.Part): TBD
-
-        Returns:
-            None
-
-        Raises:
-            HTTPRedirect: redirect to scan settings
-        """
-        if str(token) != str(self.token):
-            return self.error(f"Invalid token ({token})")
-
-        # configFile seems to get set even if a file isn't uploaded
-        if configFile and configFile.file:
-            try:
-                contents = configFile.file.read()
-
-                if isinstance(contents, bytes):
-                    contents = contents.decode('utf-8')
-
-                tmp = dict()
-                for line in contents.split("\n"):
-                    if "=" not in line:
-                        continue
-
-                    opt_array = line.strip().split("=")
-                    if len(opt_array) == 1:
-                        opt_array[1] = ""
-
-                    tmp[opt_array[0]] = '='.join(opt_array[1:])
-
-                allopts = json.dumps(tmp).encode('utf-8')
-            except Exception as e:
-                return self.error(f"Failed to parse input file. Was it generated from SpiderFoot? ({e})")
-
-        # Reset config to default
-        if allopts == "RESET":
-            if self.reset_settings():
-                raise cherrypy.HTTPRedirect(f"{self.docroot}/opts?updated=1")
-            return self.error("Failed to reset settings")
-
-        # Save settings
-        try:
-            dbh = SpiderFootDb(self.config)
-            useropts = json.loads(allopts)
-            cleanopts = dict()
-            for opt in list(useropts.keys()):
-                cleanopts[opt] = self.cleanUserInput([useropts[opt]])[0]
-
-            currentopts = deepcopy(self.config)
-
-            # Make a new config where the user options override
-            # the current system config.
-            sf = SpiderFoot(self.config)
-            self.config = sf.configUnserialize(cleanopts, currentopts)
-            dbh.configSet(sf.configSerialize(self.config))
-        except Exception as e:
-            return self.error(f"Processing one or more of your inputs failed: {e}")
-
-        raise cherrypy.HTTPRedirect(f"{self.docroot}/opts?updated=1")
-
-    @cherrypy.expose
-    def savesettingsraw(self: 'SpiderFootWebUi', allopts: str, token: str) -> str:
-        """Save settings, also used to completely reset them to default.
-
-        Args:
-            allopts: TBD
-            token (str): CSRF token
-
-        Returns:
-            str: save success as JSON
-        """
-        cherrypy.response.headers['Content-Type'] = "application/json; charset=utf-8"
-
-        if str(token) != str(self.token):
-            return json.dumps(["ERROR", f"Invalid token ({token})."]).encode('utf-8')
-
-        # Reset config to default
-        if allopts == "RESET":
-            if self.reset_settings():
-                return json.dumps(["SUCCESS", ""]).encode('utf-8')
-            return json.dumps(["ERROR", "Failed to reset settings"]).encode('utf-8')
-
-        # Save settings
-        try:
-            dbh = SpiderFootDb(self.config)
-            useropts = json.loads(allopts)
-            cleanopts = dict()
-            for opt in list(useropts.keys()):
-                cleanopts[opt] = self.cleanUserInput([useropts[opt]])[0]
-
-            currentopts = deepcopy(self.config)
-
-            # Make a new config where the user options override
-            # the current system config.
-            sf = SpiderFoot(self.config)
-            self.config = sf.configUnserialize(cleanopts, currentopts)
-            dbh.configSet(sf.configSerialize(self.config))
-        except Exception as e:
-            return json.dumps(["ERROR", f"Processing one or more of your inputs failed: {e}"]).encode('utf-8')
-
-        return json.dumps(["SUCCESS", ""]).encode('utf-8')
-
-    def reset_settings(self: 'SpiderFootWebUi') -> bool:
-        """Reset settings to default.
-
-        Returns:
-            bool: success
-        """
-        try:
-            dbh = SpiderFootDb(self.config)
-            dbh.configClear()  # Clear it in the DB
-            self.config = deepcopy(self.defaultConfig)  # Clear in memory
-        except Exception:
-            return False
-
-        return True
-
-    @cherrypy.expose
-    def resultsetfp(self: 'SpiderFootWebUi', id: str, resultids: str, fp: str) -> str:
-        """Set a bunch of results (hashes) as false positive.
-
-        Args:
-            id (str): scan ID
-            resultids (str): comma separated list of result IDs
-            fp (str): 0 or 1
-
-        Returns:
-            str: set false positive status as JSON
-        """
-        cherrypy.response.headers['Content-Type'] = "application/json; charset=utf-8"
-
-        dbh = SpiderFootDb(self.config)
-
-        if fp not in ["0", "1"]:
-            return json.dumps(["ERROR", "No FP flag set or not set correctly."]).encode('utf-8')
-
-        try:
-            ids = json.loads(resultids)
-        except Exception:
-            return json.dumps(["ERROR", "No IDs supplied."]).encode('utf-8')
-
-        # Cannot set FPs if a scan is not completed
-        status = dbh.scanInstanceGet(id)
-        if not status:
-            return self.error(f"Invalid scan ID: {id}")
-
-        if status[5] not in ["ABORTED", "FINISHED", "ERROR-FAILED"]:
-            return json.dumps([
-                "WARNING",
-                "Scan must be in a finished state when setting False Positives."
-            ]).encode('utf-8')
-
-        # Make sure the user doesn't set something as non-FP when the
-        # parent is set as an FP.
-        if fp == "0":
-            data = dbh.scanElementSourcesDirect(id, ids)
-            for row in data:
-                if str(row[14]) == "1":
-                    return json.dumps([
-                        "WARNING",
-                        f"Cannot unset element {id} as False Positive if a parent element is still False Positive."
-                    ]).encode('utf-8')
-
-        # Set all the children as FPs too.. it's only logical afterall, right?
-        childs = dbh.scanElementChildrenAll(id, ids)
-        allIds = ids + childs
-
-        ret = dbh.scanResultsUpdateFP(id, allIds, fp)
-        if ret:
-            return json.dumps(["SUCCESS", ""]).encode('utf-8')
-
-        return json.dumps(["ERROR", "Exception encountered."]).encode('utf-8')
-
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def eventtypes(self: 'SpiderFootWebUi') -> list:
-        """List all event types.
-
-        Returns:
-            list: list of event types
-        """
-        cherrypy.response.headers['Content-Type'] = "application/json; charset=utf-8"
-
-        dbh = SpiderFootDb(self.config)
-        types = dbh.eventTypes()
-        ret = list()
-
-        for r in types:
-            ret.append([r[1], r[0]])
-
-        return sorted(ret, key=itemgetter(0))
-
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def modules(self: 'SpiderFootWebUi') -> list:
-        """List all modules.
-
-        Returns:
-            list: list of modules
-        """
-        cherrypy.response.headers['Content-Type'] = "application/json; charset=utf-8"
-
-        ret = list()
-
-        modinfo = list(self.config['__modules__'].keys())
+                config_file_contents = contents
+
+        success, message = config_service.save_settings(allopts, token, config_file_contents)
+
+        if not success:
+            return _error_page(request, message)
+
+        return RedirectResponse(url=f"{docroot}/opts?updated=1", status_code=302)
+
+    @app.post("/savesettingsraw")
+    async def savesettingsraw(
+        request: Request,
+        allopts: str = Form(""),
+        token: str = Form(""),
+    ):
+        status, message = config_service.save_settings_raw(allopts, token)
+        return JSONResponse([status, message])
+
+    # =====================================================================
+    # META ENDPOINTS
+    # =====================================================================
+
+    @app.get("/ping")
+    async def ping():
+        return JSONResponse(["SUCCESS", __version__])
+
+    @app.get("/modules")
+    async def modules():
+        ret = []
+        modinfo = list(app_config['__modules__'].keys())
         if not modinfo:
-            return ret
-
+            return JSONResponse(ret)
         modinfo.sort()
-
         for m in modinfo:
             if "__" in m:
                 continue
-            ret.append({'name': m, 'descr': self.config['__modules__'][m]['descr']})
+            ret.append({'name': m, 'descr': app_config['__modules__'][m]['descr']})
+        return JSONResponse(ret)
 
-        return ret
+    @app.get("/eventtypes")
+    async def eventtypes():
+        dbh = SpiderFootDb(app_config)
+        types = dbh.eventTypes()
+        ret = []
+        for r in types:
+            ret.append([r[1], r[0]])
+        return JSONResponse(sorted(ret, key=itemgetter(0)))
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def correlationrules(self: 'SpiderFootWebUi') -> list:
-        """List all correlation rules.
-
-        Returns:
-            list: list of correlation rules
-        """
-        cherrypy.response.headers['Content-Type'] = "application/json; charset=utf-8"
-
-        ret = list()
-
-        rules = self.config['__correlationrules__']
+    @app.get("/correlationrules")
+    async def correlationrules():
+        ret = []
+        rules = app_config.get('__correlationrules__')
         if not rules:
-            return ret
-
+            return JSONResponse(ret)
         for r in rules:
             ret.append({
                 'id': r['id'],
@@ -1331,554 +860,307 @@ class SpiderFootWebUi:
                 'descr': r['meta']['description'],
                 'risk': r['meta']['risk'],
             })
+        return JSONResponse(ret)
 
-        return ret
+    @app.post("/query")
+    async def query_endpoint(query: str = Form("")):
+        success, result = data_service.query(query)
+        if not success:
+            status_code = 400 if "Non-SELECT" in str(result) or "Invalid" in str(result) else 500
+            return JSONResponse(
+                {'error': {'http_status': str(status_code), 'message': result}},
+                status_code=status_code,
+            )
+        return JSONResponse(result)
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def ping(self: 'SpiderFootWebUi') -> list:
-        """For the CLI to test connectivity to this server.
+    @app.get("/vacuum")
+    async def vacuum():
+        status, message = scan_service.vacuum_db()
+        return JSONResponse([status, message])
 
-        Returns:
-            list: SpiderFoot version as JSON
-        """
-        return ["SUCCESS", __version__]
+    return app
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def query(self: 'SpiderFootWebUi', query: str) -> str:
-        """For the CLI to run queries against the database.
 
-        Args:
-            query (str): SQL query
+# =====================================================================
+# Backward-compatible SpiderFootWebUi class for tests
+# =====================================================================
 
-        Returns:
-            str: query results as JSON
-        """
-        dbh = SpiderFootDb(self.config)
+class SpiderFootWebUi:
+    """SpiderFoot web interface -- thin wrapper for backward compatibility with tests."""
 
-        if not query:
-            return self.jsonify_error('400', "Invalid query.")
+    def __init__(self, web_config: dict, config: dict, loggingQueue=None):
+        if not isinstance(config, dict):
+            raise TypeError(f"config is {type(config)}; expected dict()")
+        if not config:
+            raise ValueError("config is empty")
 
-        if not query.lower().startswith("select"):
-            return self.jsonify_error('400', "Non-SELECTs are unpredictable and not recommended.")
+        if not isinstance(web_config, dict):
+            raise TypeError(f"web_config is {type(web_config)}; expected dict()")
+        if not config:
+            raise ValueError("web_config is empty")
 
-        try:
-            ret = dbh.dbh.execute(query)
-            data = ret.fetchall()
-            columnNames = [c[0] for c in dbh.dbh.description]
-            return [dict(zip(columnNames, row)) for row in data]
-        except Exception as e:
-            return self.jsonify_error('500', str(e))
+        self.docroot = web_config.get('root', '/').rstrip('/')
 
-    @cherrypy.expose
-    def startscan(self: 'SpiderFootWebUi', scanname: str, scantarget: str, modulelist: str, typelist: str, usecase: str) -> str:
-        """Initiate a scan.
+        self.defaultConfig = deepcopy(config)
+        dbh = SpiderFootDb(self.defaultConfig, init=True)
+        sf = SpiderFoot(self.defaultConfig)
+        self.config = sf.configUnserialize(dbh.configGet(), self.defaultConfig)
 
-        Args:
-            scanname (str): scan name
-            scantarget (str): scan target
-            modulelist (str): comma separated list of modules to use
-            typelist (str): selected modules based on produced event data types
-            usecase (str): selected module group (passive, investigate, footprint, all)
-
-        Returns:
-            str: start scan status as JSON
-
-        Raises:
-            HTTPRedirect: redirect to new scan info page
-        """
-        scanname = self.cleanUserInput([scanname])[0]
-        scantarget = self.cleanUserInput([scantarget])[0]
-
-        if not scanname:
-            if cherrypy.request.headers.get('Accept') and 'application/json' in cherrypy.request.headers.get('Accept'):
-                cherrypy.response.headers['Content-Type'] = "application/json; charset=utf-8"
-                return json.dumps(["ERROR", "Incorrect usage: scan name was not specified."]).encode('utf-8')
-
-            return self.error("Invalid request: scan name was not specified.")
-
-        if not scantarget:
-            if cherrypy.request.headers.get('Accept') and 'application/json' in cherrypy.request.headers.get('Accept'):
-                cherrypy.response.headers['Content-Type'] = "application/json; charset=utf-8"
-                return json.dumps(["ERROR", "Incorrect usage: scan target was not specified."]).encode('utf-8')
-
-            return self.error("Invalid request: scan target was not specified.")
-
-        if not typelist and not modulelist and not usecase:
-            if cherrypy.request.headers.get('Accept') and 'application/json' in cherrypy.request.headers.get('Accept'):
-                cherrypy.response.headers['Content-Type'] = "application/json; charset=utf-8"
-                return json.dumps(["ERROR", "Incorrect usage: no modules specified for scan."]).encode('utf-8')
-
-            return self.error("Invalid request: no modules specified for scan.")
-
-        targetType = SpiderFootHelpers.targetTypeFromString(scantarget)
-        if targetType is None:
-            if cherrypy.request.headers.get('Accept') and 'application/json' in cherrypy.request.headers.get('Accept'):
-                cherrypy.response.headers['Content-Type'] = "application/json; charset=utf-8"
-                return json.dumps(["ERROR", "Unrecognised target type."]).encode('utf-8')
-
-            return self.error("Invalid target type. Could not recognize it as a target SpiderFoot supports.")
-
-        # Swap the globalscantable for the database handler
-        dbh = SpiderFootDb(self.config)
-
-        # Snapshot the current configuration to be used by the scan
-        cfg = deepcopy(self.config)
-        sf = SpiderFoot(cfg)
-
-        modlist = list()
-
-        # User selected modules
-        if modulelist:
-            modlist = modulelist.replace('module_', '').split(',')
-
-        # User selected types
-        if len(modlist) == 0 and typelist:
-            typesx = typelist.replace('type_', '').split(',')
-
-            # 1. Find all modules that produce the requested types
-            modlist = sf.modulesProducing(typesx)
-            newmods = deepcopy(modlist)
-            newmodcpy = deepcopy(newmods)
-
-            # 2. For each type those modules consume, get modules producing
-            while len(newmodcpy) > 0:
-                for etype in sf.eventsToModules(newmodcpy):
-                    xmods = sf.modulesProducing([etype])
-                    for mod in xmods:
-                        if mod not in modlist:
-                            modlist.append(mod)
-                            newmods.append(mod)
-                newmodcpy = deepcopy(newmods)
-                newmods = list()
-
-        # User selected a use case
-        if len(modlist) == 0 and usecase:
-            for mod in self.config['__modules__']:
-                if usecase == 'all' or usecase in self.config['__modules__'][mod]['group']:
-                    modlist.append(mod)
-
-        # If we somehow got all the way through to here and still don't have any modules selected
-        if not modlist:
-            if cherrypy.request.headers.get('Accept') and 'application/json' in cherrypy.request.headers.get('Accept'):
-                cherrypy.response.headers['Content-Type'] = "application/json; charset=utf-8"
-                return json.dumps(["ERROR", "Incorrect usage: no modules specified for scan."]).encode('utf-8')
-
-            return self.error("Invalid request: no modules specified for scan.")
-
-        # Add our mandatory storage module
-        if "sfp__stor_db" not in modlist:
-            modlist.append("sfp__stor_db")
-        modlist.sort()
-
-        # Delete the stdout module in case it crept in
-        if "sfp__stor_stdout" in modlist:
-            modlist.remove("sfp__stor_stdout")
-
-        # Start running a new scan
-        if targetType in ["HUMAN_NAME", "USERNAME", "BITCOIN_ADDRESS"]:
-            scantarget = scantarget.replace("\"", "")
+        if loggingQueue is None:
+            self.loggingQueue = mp.Queue()
+            logListenerSetup(self.loggingQueue, self.config)
         else:
-            scantarget = scantarget.lower()
+            self.loggingQueue = loggingQueue
+        logWorkerSetup(self.loggingQueue)
+        self.log = logging.getLogger(f"spiderfoot.{__name__}")
 
-        # Start running a new scan
-        scanId = SpiderFootHelpers.genScanInstanceId()
-        try:
-            p = mp.Process(target=startSpiderFootScanner, args=(self.loggingQueue, scanname, scanId, scantarget, targetType, modlist, cfg))
-            p.daemon = True
-            p.start()
-        except Exception as e:
-            self.log.error(f"[-] Scan [{scanId}] failed: {e}")
-            return self.error(f"[-] Scan [{scanId}] failed: {e}")
+        self.token = None
 
-        # Wait until the scan has initialized
-        # Check the database for the scan status results
-        while dbh.scanInstanceGet(scanId) is None:
-            self.log.info("Waiting for the scan to initialize...")
-            time.sleep(1)
+        self._scan_service = ScanService(self.config, self.defaultConfig, self.loggingQueue)
+        self._config_service = ConfigService(self.config, self.defaultConfig)
+        self._data_service = DataService(self.config)
 
-        if cherrypy.request.headers.get('Accept') and 'application/json' in cherrypy.request.headers.get('Accept'):
-            cherrypy.response.headers['Content-Type'] = "application/json; charset=utf-8"
-            return json.dumps(["SUCCESS", scanId]).encode('utf-8')
+        self._templates = Jinja2Templates(
+            directory=os.path.join(os.path.dirname(os.path.abspath(__file__)), "spiderfoot", "templates")
+        )
+        self._templates.env.filters['urlize_step'] = _urlize_step
 
-        raise cherrypy.HTTPRedirect(f"{self.docroot}/scaninfo?id={scanId}")
+    def _render_template(self, template_name, **kwargs):
+        ctx = {
+            "docroot": self.docroot,
+            "version": __version__,
+            "footer_message": random.choice(FOOTER_MESSAGES),
+        }
+        ctx.update(kwargs)
+        template = self._templates.env.get_template(template_name)
+        return template.render(**ctx)
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def stopscan(self: 'SpiderFootWebUi', id: str) -> str:
-        """Stop a scan.
+    def error_page(self):
+        pass
 
-        Args:
-            id (str): comma separated list of scan IDs
-
-        Returns:
-            str: JSON response
-        """
-        if not id:
-            return self.jsonify_error('404', "No scan specified")
-
-        dbh = SpiderFootDb(self.config)
-        ids = id.split(',')
-
-        for scan_id in ids:
-            res = dbh.scanInstanceGet(scan_id)
-            if not res:
-                return self.jsonify_error('404', f"Scan {scan_id} does not exist")
-
-            scan_status = res[5]
-
-            if scan_status == "FINISHED":
-                return self.jsonify_error('400', f"Scan {scan_id} has already finished.")
-
-            if scan_status == "ABORTED":
-                return self.jsonify_error('400', f"Scan {scan_id} has already aborted.")
-
-            if scan_status != "RUNNING" and scan_status != "STARTING":
-                return self.jsonify_error('400', f"The running scan is currently in the state '{scan_status}', please try again later or restart SpiderFoot.")
-
-        for scan_id in ids:
-            dbh.scanInstanceSet(scan_id, status="ABORT-REQUESTED")
-
+    def error_page_401(self, status, message, traceback, version):
         return ""
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def vacuum(self):
+    def error_page_404(self, status, message, traceback, version):
+        return self._render_template("error.html", message='Not Found', status=status)
+
+    def jsonify_error(self, status, message):
+        return {'error': {'http_status': status, 'message': message}}
+
+    def error(self, message):
+        return self._render_template("error.html", message=message)
+
+    def cleanUserInput(self, inputList):
+        return clean_user_input(inputList)
+
+    def searchBase(self, id=None, eventType=None, value=None):
+        return self._data_service.search(id, eventType, value)
+
+    def buildExcel(self, data, columnNames, sheetNameIndex=0):
+        return build_excel(data, columnNames, sheetNameIndex)
+
+    def scanexportlogs(self, id, dialect="excel"):
         dbh = SpiderFootDb(self.config)
         try:
-            if dbh.vacuumDB():
-                return json.dumps(["SUCCESS", ""]).encode('utf-8')
-            return json.dumps(["ERROR", "Vacuuming the database failed"]).encode('utf-8')
-        except Exception as e:
-            return json.dumps(["ERROR", f"Vacuuming the database failed: {e}"]).encode('utf-8')
-
-    #
-    # DATA PROVIDERS
-    #
-
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def scanlog(self: 'SpiderFootWebUi', id: str, limit: str = None, rowId: str = None, reverse: str = None) -> list:
-        """Scan log data.
-
-        Args:
-            id (str): scan ID
-            limit (str): TBD
-            rowId (str): TBD
-            reverse (str): TBD
-
-        Returns:
-            list: scan log
-        """
-        dbh = SpiderFootDb(self.config)
-        retdata = []
-
-        try:
-            data = dbh.scanLogs(id, limit, rowId, reverse)
+            data = dbh.scanLogs(id, None, None, True)
         except Exception:
-            return retdata
-
-        for row in data:
-            generated = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row[0] / 1000))
-            retdata.append([generated, row[1], row[2], html.escape(row[3]), row[4]])
-
-        return retdata
-
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def scanerrors(self: 'SpiderFootWebUi', id: str, limit: str = None) -> list:
-        """Scan error data.
-
-        Args:
-            id (str): scan ID
-            limit (str): limit number of results
-
-        Returns:
-            list: scan errors
-        """
-        dbh = SpiderFootDb(self.config)
-        retdata = []
-
-        try:
-            data = dbh.scanErrors(id, limit)
-        except Exception:
-            return retdata
-
-        for row in data:
-            generated = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row[0] / 1000))
-            retdata.append([generated, row[1], html.escape(str(row[2]))])
-
-        return retdata
-
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def scanlist(self: 'SpiderFootWebUi') -> list:
-        """Produce a list of scans.
-
-        Returns:
-            list: scan list
-        """
-        dbh = SpiderFootDb(self.config)
-        data = dbh.scanInstanceList()
-        retdata = []
-
-        for row in data:
-            created = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row[3]))
-            riskmatrix = {
-                "HIGH": 0,
-                "MEDIUM": 0,
-                "LOW": 0,
-                "INFO": 0
-            }
-            correlations = dbh.scanCorrelationSummary(row[0], by="risk")
-            if correlations:
-                for c in correlations:
-                    riskmatrix[c[0]] = c[1]
-
-            if row[4] == 0:
-                started = "Not yet"
-            else:
-                started = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row[4]))
-
-            if row[5] == 0:
-                finished = "Not yet"
-            else:
-                finished = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row[5]))
-
-            retdata.append([row[0], row[1], row[2], created, started, finished, row[6], row[7], riskmatrix])
-
-        return retdata
-
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def scanstatus(self: 'SpiderFootWebUi', id: str) -> list:
-        """Show basic information about a scan, including status and number of each event type.
-
-        Args:
-            id (str): scan ID
-
-        Returns:
-            list: scan status
-        """
-        dbh = SpiderFootDb(self.config)
-        data = dbh.scanInstanceGet(id)
+            return self.error("Scan ID not found.")
 
         if not data:
-            return []
+            return self.error("Scan ID not found.")
 
-        created = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(data[2]))
-        started = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(data[3]))
-        ended = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(data[4]))
-        riskmatrix = {
-            "HIGH": 0,
-            "MEDIUM": 0,
-            "LOW": 0,
-            "INFO": 0
-        }
-        correlations = dbh.scanCorrelationSummary(id, by="risk")
-        if correlations:
-            for c in correlations:
-                riskmatrix[c[0]] = c[1]
-
-        return [data[0], data[1], created, started, ended, data[5], riskmatrix]
-
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def scansummary(self: 'SpiderFootWebUi', id: str, by: str) -> list:
-        """Summary of scan results.
-
-        Args:
-            id (str): scan ID
-            by (str): filter by type
-
-        Returns:
-            list: scan summary
-        """
-        retdata = []
-
-        dbh = SpiderFootDb(self.config)
-
-        try:
-            scandata = dbh.scanResultSummary(id, by)
-        except Exception:
-            return retdata
-
-        try:
-            statusdata = dbh.scanInstanceGet(id)
-        except Exception:
-            return retdata
-
-        for row in scandata:
-            if row[0] == "ROOT":
-                continue
-            lastseen = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row[2]))
-            retdata.append([row[0], row[1], lastseen, row[3], row[4], statusdata[5]])
-
-        return retdata
-
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def scancorrelations(self: 'SpiderFootWebUi', id: str) -> list:
-        """Correlation results from a scan.
-
-        Args:
-            id (str): scan ID
-
-        Returns:
-            list: correlation result list
-        """
-        retdata = []
-
-        dbh = SpiderFootDb(self.config)
-
-        try:
-            corrdata = dbh.scanCorrelationList(id)
-        except Exception:
-            return retdata
-
-        for row in corrdata:
-            retdata.append([row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]])
-
-        return retdata
-
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def scaneventresults(self: 'SpiderFootWebUi', id: str, eventType: str = None, filterfp: bool = False, correlationId: str = None) -> list:
-        """Return all event results for a scan as JSON.
-
-        Args:
-            id (str): scan ID
-            eventType (str): filter by event type
-            filterfp (bool): remove false positives from search results
-            correlationId (str): filter by events associated with a correlation
-
-        Returns:
-            list: scan results
-        """
-        retdata = []
-
-        dbh = SpiderFootDb(self.config)
-
-        if not eventType:
-            eventType = 'ALL'
-
-        try:
-            data = dbh.scanResultEvent(id, eventType, filterfp, correlationId=correlationId)
-        except Exception:
-            return retdata
-
+        fileobj = StringIO()
+        parser = csv.writer(fileobj, dialect=dialect)
+        parser.writerow(["Date", "Component", "Type", "Event", "Event ID"])
         for row in data:
-            lastseen = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row[0]))
-            retdata.append([
-                lastseen,
-                html.escape(row[1]),
-                html.escape(row[2]),
-                row[3],
-                row[5],
-                row[6],
-                row[7],
-                row[8],
-                row[13],
-                row[14],
-                row[4]
+            parser.writerow([
+                time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row[0] / 1000)),
+                str(row[1]), str(row[2]), str(row[3]), row[4]
             ])
+        return fileobj.getvalue().encode('utf-8')
 
-        return retdata
+    def scanopts(self, id):
+        return self._scan_service.scan_config(id)
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def scaneventresultsunique(self: 'SpiderFootWebUi', id: str, eventType: str, filterfp: bool = False) -> list:
-        """Return unique event results for a scan as JSON.
+    def rerunscan(self, id):
+        success, message, new_id = self._scan_service.rerun_scan(id)
+        if not success:
+            return self.error(message)
+        return f"Scan {new_id} started"
 
-        Args:
-            id (str): filter search results by scan ID
-            eventType (str): filter search results by event type
-            filterfp (bool): remove false positives from search results
-
-        Returns:
-            list: unique search results
-        """
+    def newscan(self):
         dbh = SpiderFootDb(self.config)
-        retdata = []
+        types = dbh.eventTypes()
+        return self._render_template("newscan.html", pageid='NEWSCAN', types=types,
+                                     modules=self.config['__modules__'], scanname="",
+                                     selectedmods="", scantarget="")
 
-        try:
-            data = dbh.scanResultEventUnique(id, eventType, filterfp)
-        except Exception:
-            return retdata
+    def clonescan(self, id):
+        dbh = SpiderFootDb(self.config)
+        types = dbh.eventTypes()
+        info = dbh.scanInstanceGet(id)
 
-        for row in data:
-            escaped = html.escape(row[0])
-            retdata.append([escaped, row[1], row[2]])
+        if not info:
+            return self.error("Invalid scan ID.")
 
-        return retdata
+        scanconfig = dbh.scanConfigGet(id)
+        scanname = info[0]
+        scantarget = info[1]
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def search(self: 'SpiderFootWebUi', id: str = None, eventType: str = None, value: str = None) -> list:
-        """Search scans.
+        if scanname == "" or scantarget == "" or len(scanconfig) == 0:
+            return self.error("Something went wrong internally.")
 
-        Args:
-            id (str): filter search results by scan ID
-            eventType (str): filter search results by event type
-            value (str): filter search results by event value
+        target_type = SpiderFootHelpers.targetTypeFromString(scantarget)
+        if target_type is None:
+            scantarget = "&quot;" + scantarget + "&quot;"
 
-        Returns:
-            list: search results
-        """
+        modlist = scanconfig['_modulesenabled'].split(',')
+
+        return self._render_template("newscan.html", pageid='NEWSCAN', types=types,
+                                     modules=self.config['__modules__'], selectedmods=modlist,
+                                     scanname=str(scanname), scantarget=str(scantarget))
+
+    def index(self):
+        return self._render_template("scanlist.html", pageid='SCANLIST')
+
+    def scaninfo(self, id):
+        dbh = SpiderFootDb(self.config)
+        res = dbh.scanInstanceGet(id)
+        if res is None:
+            return self.error("Scan ID not found.")
+        return self._render_template("scaninfo.html", id=id, name=html.escape(res[0]),
+                                     status=res[5], pageid="SCANLIST")
+
+    def opts(self, updated=None):
+        self.token = random.SystemRandom().randint(0, 99999999)
+        self._config_service.token = self.token
+        return self._render_template("opts.html", opts=self.config, pageid='SETTINGS',
+                                     token=self.token, updated=updated)
+
+    def optsexport(self, pattern=None):
+        return self._config_service.export_config(pattern)
+
+    def optsraw(self):
+        token, data = self._config_service.get_raw_config()
+        self.token = token
+        return ['SUCCESS', {'token': token, 'data': data}]
+
+    def scandelete(self, id):
+        success, error_code, message = self._scan_service.delete_scan(id)
+        if not success:
+            return self.jsonify_error(error_code, message)
+        return ""
+
+    def savesettings(self, allopts, token, configFile=None):
+        config_file_contents = None
+        if configFile and hasattr(configFile, 'file') and configFile.file:
+            contents = configFile.file.read()
+            if isinstance(contents, bytes):
+                config_file_contents = contents.decode('utf-8')
+            else:
+                config_file_contents = contents
+
+        success, message = self._config_service.save_settings(allopts, token, config_file_contents)
+        if not success:
+            return self.error(message)
+        return None
+
+    def savesettingsraw(self, allopts, token):
+        status, message = self._config_service.save_settings_raw(allopts, token)
+        return json.dumps([status, message]).encode('utf-8')
+
+    def reset_settings(self):
+        return self._config_service.reset_settings()
+
+    def eventtypes(self):
+        dbh = SpiderFootDb(self.config)
+        types = dbh.eventTypes()
+        ret = []
+        for r in types:
+            ret.append([r[1], r[0]])
+        return sorted(ret, key=itemgetter(0))
+
+    def modules(self):
+        ret = []
+        modinfo = list(self.config['__modules__'].keys())
+        if not modinfo:
+            return ret
+        modinfo.sort()
+        for m in modinfo:
+            if "__" in m:
+                continue
+            ret.append({'name': m, 'descr': self.config['__modules__'][m]['descr']})
+        return ret
+
+    def correlationrules(self):
+        ret = []
+        rules = self.config.get('__correlationrules__')
+        if not rules:
+            return ret
+        for r in rules:
+            ret.append({
+                'id': r['id'],
+                'name': r['meta']['name'],
+                'descr': r['meta']['description'],
+                'risk': r['meta']['risk'],
+            })
+        return ret
+
+    def ping(self):
+        return ["SUCCESS", __version__]
+
+    def query(self, query):
+        success, result = self._data_service.query(query)
+        if not success:
+            return self.jsonify_error('400' if 'Non-SELECT' in str(result) or 'Invalid' in str(result) else '500', result)
+        return result
+
+    def startscan(self, scanname, scantarget, modulelist, typelist, usecase):
+        success, message, scan_id = self._scan_service.start_scan(scanname, scantarget, modulelist, typelist, usecase)
+        if not success:
+            return self.error(message)
+        return f"Scan {scan_id} started"
+
+    def stopscan(self, id):
+        success, error_code, message = self._scan_service.stop_scan(id)
+        if not success:
+            return self.jsonify_error(error_code, message)
+        return ""
+
+    def scanlog(self, id, limit=None, rowId=None, reverse=None):
+        return self._scan_service.scan_logs(id, limit, rowId, reverse)
+
+    def scanerrors(self, id, limit=None):
+        return self._scan_service.scan_errors(id, limit)
+
+    def scanlist(self):
+        return self._scan_service.list_scans()
+
+    def scanstatus(self, id):
+        return self._scan_service.scan_status(id)
+
+    def scansummary(self, id, by):
+        return self._scan_service.scan_summary(id, by)
+
+    def scancorrelations(self, id):
+        return self._scan_service.scan_correlations(id)
+
+    def scaneventresults(self, id, eventType=None, filterfp=False, correlationId=None):
+        return self._scan_service.scan_event_results(id, eventType, filterfp, correlationId)
+
+    def scaneventresultsunique(self, id, eventType, filterfp=False):
+        return self._scan_service.scan_event_results_unique(id, eventType, filterfp)
+
+    def search(self, id=None, eventType=None, value=None):
         try:
             return self.searchBase(id, eventType, value)
         except Exception:
             return []
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def scanhistory(self: 'SpiderFootWebUi', id: str) -> list:
-        """Historical data for a scan.
-
-        Args:
-            id (str): scan ID
-
-        Returns:
-            list: scan history
-        """
+    def scanhistory(self, id):
         if not id:
             return self.jsonify_error('404', "No scan specified")
+        return self._scan_service.scan_history(id)
 
-        dbh = SpiderFootDb(self.config)
-
-        try:
-            return dbh.scanResultHistory(id)
-        except Exception:
-            return []
-
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def scanelementtypediscovery(self: 'SpiderFootWebUi', id: str, eventType: str) -> dict:
-        """Scan element type discovery.
-
-        Args:
-            id (str): scan ID
-            eventType (str): filter by event type
-
-        Returns:
-            dict
-        """
-        dbh = SpiderFootDb(self.config)
-        pc = dict()
-        datamap = dict()
-        retdata = dict()
-
-        # Get the events we will be tracing back from
-        try:
-            leafSet = dbh.scanResultEvent(id, eventType)
-            [datamap, pc] = dbh.scanElementSourcesAll(id, leafSet)
-        except Exception:
-            return retdata
-
-        # Delete the ROOT key as it adds no value from a viz perspective
-        del pc['ROOT']
-        retdata['tree'] = SpiderFootHelpers.dataParentChildToTree(pc)
-        retdata['data'] = datamap
-
-        return retdata
+    def scanelementtypediscovery(self, id, eventType):
+        return self._scan_service.scan_element_type_discovery(id, eventType)

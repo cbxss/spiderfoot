@@ -1181,7 +1181,7 @@ class SpiderFootDb:
 
         return True
 
-    def configSet(self, optMap: dict = {}) -> bool:
+    def configSet(self, optMap: dict = None) -> bool:
         """Store the default configuration in the database.
 
         Args:
@@ -1195,6 +1195,8 @@ class SpiderFootDb:
             ValueError: arg value was invalid
             IOError: database I/O failed
         """
+        if optMap is None:
+            optMap = {}
 
         if not isinstance(optMap, dict):
             raise TypeError(f"optMap is {type(optMap)}; expected dict()") from None
@@ -1269,7 +1271,7 @@ class SpiderFootDb:
             except sqlite3.Error as e:
                 raise IOError("Unable to clear configuration from the database") from e
 
-    def scanConfigSet(self, scan_id, optMap=dict()) -> None:
+    def scanConfigSet(self, scan_id, optMap=None) -> None:
         """Store a configuration value for a scan.
 
         Args:
@@ -1281,6 +1283,8 @@ class SpiderFootDb:
             ValueError: arg value was invalid
             IOError: database I/O failed
         """
+        if optMap is None:
+            optMap = {}
 
         if not isinstance(optMap, dict):
             raise TypeError(f"optMap is {type(optMap)}; expected dict()") from None

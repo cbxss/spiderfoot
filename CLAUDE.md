@@ -77,7 +77,7 @@ Target → SpiderFootScanner → ThreadPool → Modules (pub/sub events) → Spi
 
 ## Linting
 
-Flake8 with max line length 120, max complexity 60, Google docstring convention. Config in `setup.cfg`. Key ignored rules: E501, W503, B006, Q000. Modules have relaxed rules (SIM102, SIM113, SIM114, E721 ignored).
+Flake8 with max line length 120, max complexity 60, Google docstring convention. Config in `.flake8`. Key ignored rules: E501, W503, B006, Q000. Modules have relaxed rules (SIM102, SIM113, SIM114, E721 ignored).
 
 ## Testing
 

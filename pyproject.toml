@@ -17,9 +17,10 @@ dependencies = [
     "adblockparser>=0.7,<1",
     "dnspython>=2.3.0,<3",
     "ExifRead>=2.3.2,<3",
-    "CherryPy>=18.8.0,<19",
-    "cherrypy-cors>=1.6,<2",
-    "Mako>=1.2.4,<2",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "jinja2>=3.1.2",
+    "python-multipart>=0.0.6",
     "beautifulsoup4>=4.11.2,<5",
     "lxml>=4.9.2",
     "netaddr>=0.8.0,<1",
@@ -43,11 +44,24 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "pytest-xdist",
-    "pytest-cov",
-    "pytest-mock",
-    "flake8",
+    "pytest>=7.2.1",
+    "pytest-xdist>=3.2.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "responses>=0.22.0",
+    "flake8==7.3.0",
+    "darglint==1.8.1",
+    "dlint==0.14.0",
+    "flake8-annotations==2.9.1",
+    "flake8-blind-except==0.2.1",
+    "flake8-bugbear>=23.2.13",
+    "flake8-builtins==2.1.0",
+    "flake8-quotes==3.3.2",
+    "flake8-return==1.2.0",
+    "flake8-sfs==0.0.4",
+    "flake8-simplify>=0.19.3",
+    "pycodestyle>=2.9.0",
+    "httpx>=0.24.0",
 ]
 
 [project.scripts]

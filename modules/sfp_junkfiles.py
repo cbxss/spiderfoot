@@ -47,7 +47,9 @@ class sfp_junkfiles(SpiderFootPlugin):
     skiphosts = None
     bases = None
 
-    def setup(self, sfc, userOpts=dict()):
+    def setup(self, sfc, userOpts=None):
+        if userOpts is None:
+            userOpts = {}
         self.sf = sfc
         self.results = self.tempStorage()
         self.hosts = self.tempStorage()

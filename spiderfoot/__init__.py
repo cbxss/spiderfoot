@@ -5,4 +5,13 @@ from .plugin import SpiderFootPlugin
 from .target import SpiderFootTarget
 from .helpers import SpiderFootHelpers
 from .correlation import SpiderFootCorrelator
+from .ip import SpiderFootIp
+from .cache import SpiderFootCache
+from .domain import SpiderFootDomain
+from .dns_utils import SpiderFootDns
+from .http import SpiderFootHttp
+from .ssl_utils import SpiderFootSSL
+from .config import SpiderFootConfig
+from .module_introspection import SpiderFootModuleIntrospection
+from .search import SpiderFootSearch
 from spiderfoot.__version__ import __version__

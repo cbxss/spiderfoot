@@ -31,11 +31,10 @@
 #
 # Running spiderfoot unit tests in container
 #
-#   sudo docker build -t spiderfoot-test --build-arg REQUIREMENTS=test/requirements.txt .
-#   sudo docker run --rm spiderfoot-test -m pytest --flake8 .
+#   sudo docker build -t spiderfoot-test .
+#   sudo docker run --rm spiderfoot-test -m pytest .
 
 FROM alpine:3.20 AS build
-ARG REQUIREMENTS=requirements.txt
 RUN apk add --no-cache gcc git curl python3 python3-dev py3-pip swig tinyxml-dev \
  musl-dev openssl-dev libffi-dev libxslt-dev libxml2-dev jpeg-dev \
  openjpeg-dev zlib-dev cargo rust
@@ -43,8 +42,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 ENV VIRTUAL_ENV="/opt/venv"
-COPY $REQUIREMENTS requirements.txt ./
-RUN uv pip install -r "$REQUIREMENTS"
+COPY pyproject.toml uv.lock ./
+RUN uv pip install .
 
 
 FROM alpine:3.20

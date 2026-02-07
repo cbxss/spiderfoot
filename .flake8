@@ -22,7 +22,8 @@ per-file-ignores =
     sfscan.py:B036
     spiderfoot/helpers.py:B036
     spiderfoot/correlation.py:E721
-    sfwebui.py:A001,A002,B905
+    sfwebui.py:A001,A002,B905,C901
+    spiderfoot/services.py:B036
     test/*:SIM117,B904,B908,ANN,DAR
     docs/conf.py:A
 

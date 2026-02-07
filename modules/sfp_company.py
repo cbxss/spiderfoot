@@ -34,7 +34,9 @@ class sfp_company(SpiderFootPlugin):
         'filterjscss': "Filter out company names that originated from CSS/JS content. Enabling this avoids detection of popular Javascript and web framework author company names."
     }
 
-    def setup(self, sfc, userOpts=dict()):
+    def setup(self, sfc, userOpts=None):
+        if userOpts is None:
+            userOpts = {}
         self.sf = sfc
 
         for opt in list(userOpts.keys()):

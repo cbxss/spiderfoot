@@ -62,7 +62,9 @@ class sfp_accounts(SpiderFootPlugin):
     distrustedChecked = False
     lock = None
 
-    def setup(self, sfc, userOpts=dict()):
+    def setup(self, sfc, userOpts=None):
+        if userOpts is None:
+            userOpts = {}
         self.sf = sfc
         self.results = self.tempStorage()
         self.commonNames = list()

@@ -1,0 +1,192 @@
+{% include "header.html" %}
+    <script type='text/javascript' src='{{ docroot }}/static/js/spiderfoot.opts.js'></script>
+    <h2>Settings</h2>
+{% if updated %}
+<div class="alert alert-success">
+ <button type="button" class="close" data-dismiss="alert">&times;</button>
+ <h4>Success!</h4>
+ Settings updated. These will take effect the next time you run a scan.
+</div>
+{% endif %}
+<form class="form" action='{{ docroot }}/savesettings' id="savesettingsform" method='POST' enctype="multipart/form-data">
+<div class='text-left'>
+    <input type=hidden id='allopts' name='allopts' value=''>
+    <input type=hidden id='token' name='token' value="{{ token }}">
+    <input type="file" name='configFile' id="configFile" class='hidden' onChange='$("#savesettingsform").submit()' />
+    <button id="btn-save-changes" class='btn btn-primary' type="submit">Save Changes</button>
+    <button id="btn-import-config" class='btn btn-info'>Import API Keys</button>
+    <button id="btn-opt-export" class='btn btn-info'>Export API Keys</button>
+    <button id="btn-reset-settings" class='btn btn-danger'>Reset to Factory Default</button>
+<br><br>
+</div>
+
+<div class="tabbable tabs-left">
+<ul class="nav nav-pills nav-stacked col-md-3">
+<li id='tab_global' class="active"><a href="#">Global</a></li>
+{% for mod in opts['__modules__'] | sort %}
+    {% set filtered_opts = {} %}
+    {% for k, v in opts['__modules__'][mod]['opts'].items() if not k.startswith('_') %}
+        {% set _ = filtered_opts.update({k: v}) %}
+    {% endfor %}
+    {% if filtered_opts | length > 0 %}
+        {% set ns = namespace(keyicon="") %}
+        {% set api_opts = {} %}
+        {% for k, v in opts['__modules__'][mod]['opts'].items() if 'api_key' in k %}
+            {% set _ = api_opts.update({k: v}) %}
+        {% endfor %}
+        {% if api_opts | length > 0 %}
+            {% set ns.keyicon = "&nbsp;&nbsp;<i class=\"glyphicon glyphicon-lock\"></i>" %}
+        {% endif %}
+        <li id='tab_{{ mod }}'><a href='#' onclick='switchTab("{{ mod }}");' >{{ opts['__modules__'][mod]['name'] }}{{ ns.keyicon }}</a></li>
+    {% endif %}
+{% endfor %}
+</ul>
+</div>
+
+<div class="tab-content col-md-9">
+
+<div id='optsect_global' class="tab-pane active">
+<h4>Global Settings</h4>
+<table class='table table-bordered table-striped'>
+<thead><tr> <th>Option</th> <th>Value</th></tr></thead><tbody>
+{% for opt in opts | sort %}
+    {% if not opt.startswith("__") %}
+    <tr><td>{{ opts['__globaloptdescs__'].get(opt) or "No description available" }}</td><td style='vertical-align: middle'>
+        {% if opts[opt] is sameas true or opts[opt] is sameas false %}
+            {% if opts[opt] %}
+                {% set seltrue = "selected" %}
+                {% set selfalse = "" %}
+            {% else %}
+                {% set selfalse = "selected" %}
+                {% set seltrue = "" %}
+            {% endif %}
+            <select id='{{ opt }}' class='form-control'>
+                <option value=1 {{ seltrue }}>True</option>
+                <option value=0 {{ selfalse }}>False</option>
+            </select>
+        {% elif opts[opt] is integer %}
+        <div class='form-group'>
+            <input id='{{ opt }}' class='form-control' type=text value="{{ opts[opt] }}">
+        </div>
+        {% elif opts[opt] is string %}
+        <div class='form-group'>
+            <input id='{{ opt }}' style='width: 500px' class='form-control' type=text value="{{ opts[opt] }}">
+        </div>
+        {% elif opts[opt] is iterable and opts[opt] is not mapping %}
+            {% if opts[opt][0] is string %}
+            {% set expandedopt = opts[opt] | join(',') %}
+            <div class='form-group'>
+                <input id='{{ opt }}' style='width: 500px' class='form-control' type=text value="{{ expandedopt }}">
+            </div>
+            {% elif opts[opt][0] is integer %}
+            {% set expandedopt = opts[opt] | map('string') | join(',') %}
+            <div class='form-group'>
+                <input id='{{ opt }}' class='form-control' type=text value="{{ expandedopt }}">
+            </div>
+            {% endif %}
+        {% endif %}
+    </td></tr>
+    {% endif %}
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% for mod in opts['__modules__'] | sort %}
+    {% set summary = opts['__modules__'][mod].get('descr') or 'No summary available.' %}
+    {% set categories = opts['__modules__'][mod].get('cats') or [] %}
+    {% set labels = opts['__modules__'][mod].get('labels') or [] %}
+    {% set meta = opts['__modules__'][mod].get('meta') %}
+    {% set modopts = opts['__modules__'][mod].get('opts') %}
+    {% set optdescs = opts['__modules__'][mod].get('optdescs') %}
+    {% set data_source = meta.get('dataSource') or {} %}
+    {% set website = data_source.get('website') or '' %}
+    {% set description = data_source.get('description') or '' %}
+    {% set apiKeyInstructions = data_source.get('apiKeyInstructions') or '' %}
+    <div id='optsect_{{ mod }}' class="tab-pane" style="display: none">
+    <h4>{{ opts['__modules__'][mod]['name'] }} ({{ mod }})</h4>
+
+    <table class='table table-bordered table-striped'>
+    <tbody>
+    <tr><td>Summary</td><td>{{ summary }}<br/><br/>{{ description }}</td></tr>
+
+    {% if categories %}
+    <tr><td>Categories:</td><td>{{ categories | join(', ') }}</td><tr>
+    {% endif %}
+
+    {% if labels %}
+    <tr><td>Tags:</td><td>{{ labels | join(', ') }}</td><tr>
+    {% endif %}
+
+    {% if website %}
+    <tr><td>Website:</td><td><a href="{{ website }}" target=_new>{{ website }}</a></td></tr>
+    {% endif %}
+
+    </tbody>
+    </table>
+
+    <h4>Settings</h4>
+    <table class='table table-bordered table-striped'>
+    <thead><tr><th>Option</th> <th>Value</th></tr></thead>
+    <tbody>
+
+    {% for opt in modopts | sort %}
+        {% if not opt.startswith("_") %}
+            <tr>
+              <td>{{ optdescs.get(opt) or "No description available." }}
+                {% if "api_key" in opt %}
+                    {% if apiKeyInstructions %}
+                        {% set ns = namespace(instructions="") %}
+                        {% for step in apiKeyInstructions %}
+                            {% set ns.instructions = ns.instructions ~ "<li>" ~ (step | urlize_step) ~ "</li>" %}
+                        {% endfor %}
+                        &nbsp;&nbsp;<a href='#' data-html="true" data-toggle="popover" data-trigger="focus" title="Instructions" data-content="<ol>{{ ns.instructions }}</ol>"><i class="glyphicon glyphicon-question-sign"></i></a>
+                    {% endif %}
+                {% endif %}
+              </td>
+              <td style='vertical-align: middle'>
+            {% if modopts[opt] is sameas true or modopts[opt] is sameas false %}
+                {% if modopts[opt] %}
+                    {% set seltrue = "selected" %}
+                    {% set selfalse = "" %}
+                {% else %}
+                    {% set selfalse = "selected" %}
+                    {% set seltrue = "" %}
+                {% endif %}
+                <select id='{{ mod }}:{{ opt }}' class='form-control'>
+                    <option value=1 {{ seltrue }}>True</option>
+                    <option value=0 {{ selfalse }}>False</option>
+                </select>
+            {% elif modopts[opt] is integer %}
+                <div class='form-group'>
+                    <input id='{{ mod }}:{{ opt }}' class='form-control' type=text value="{{ modopts[opt] }}">
+                </div>
+            {% elif modopts[opt] is string %}
+                <div class='form-group'>
+                    <input id='{{ mod }}:{{ opt }}' style='width: 500px' class='form-control' type=text value="{{ modopts[opt] }}">
+                </div>
+            {% elif modopts[opt] is iterable and modopts[opt] is not mapping %}
+                {% if modopts[opt][0] is string %}
+                {% set expandedopt = modopts[opt] | join(',') %}
+                <div class='form-group'>
+                    <input id='{{ mod }}:{{ opt }}' style='width: 500px' class='form-control' type=text value="{{ expandedopt }}">
+                </div>
+                {% elif modopts[opt][0] is integer %}
+                {% set expandedopt = modopts[opt] | map('string') | join(',') %}
+                <div class='form-group'>
+                    <input id='{{ mod }}:{{ opt }}' class='form-control' type=text value="{{ expandedopt }}">
+                </div>
+                {% endif %}
+            {% endif %}
+
+            </td></tr>
+        {% endif %}
+    {% endfor %}
+    </tbody>
+    </table>
+    </div>
+{% endfor %}
+</div>
+</div> <!-- /tabbable tabs-left -->
+</form>
+<br><br>
+{% include "footer.html" %}

@@ -48,7 +48,9 @@ class sfp_emailformat(SpiderFootPlugin):
 
     results = None
 
-    def setup(self, sfc, userOpts=dict()):
+    def setup(self, sfc, userOpts=None):
+        if userOpts is None:
+            userOpts = {}
         self.sf = sfc
         self.results = self.tempStorage()
 

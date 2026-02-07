@@ -54,7 +54,9 @@ class sfp_tool_onesixtyone(SpiderFootPlugin):
     errorState = False
     communitiesFile = None
 
-    def setup(self, sfc, userOpts=dict()):
+    def setup(self, sfc, userOpts=None):
+        if userOpts is None:
+            userOpts = {}
         self.sf = sfc
         self.results = dict()
         self.errorState = False

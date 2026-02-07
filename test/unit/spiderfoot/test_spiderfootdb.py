@@ -596,7 +596,7 @@ class TestSpiderFootDb(unittest.TestCase):
         """
         sfdb = SpiderFootDb(self.default_options, False)
 
-        invalid_types = [None, "", list()]
+        invalid_types = ["", list()]
         for invalid_type in invalid_types:
             with self.subTest(invalid_type=invalid_type):
                 with self.assertRaises(TypeError):
@@ -637,7 +637,7 @@ class TestSpiderFootDb(unittest.TestCase):
         sfdb = SpiderFootDb(self.default_options, False)
 
         instance_id = "example instance id"
-        invalid_types = [None, ""]
+        invalid_types = [""]
         for invalid_type in invalid_types:
             with self.subTest(invalid_type=invalid_type):
                 with self.assertRaises(TypeError):

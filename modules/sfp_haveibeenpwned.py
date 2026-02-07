@@ -58,7 +58,9 @@ class sfp_haveibeenpwned(SpiderFootPlugin):
     results = None
     errorState = False
 
-    def setup(self, sfc, userOpts=dict()):
+    def setup(self, sfc, userOpts=None):
+        if userOpts is None:
+            userOpts = {}
         self.sf = sfc
         self.results = self.tempStorage()
         self.errorState = False
@@ -78,20 +80,14 @@ class sfp_haveibeenpwned(SpiderFootPlugin):
         return ["EMAILADDR_COMPROMISED", "PHONE_NUMBER_COMPROMISED", "LEAKSITE_CONTENT", "LEAKSITE_URL"]
 
     def query(self, qry):
-        if self.opts['api_key']:
-            version = "3"
-        else:
-            version = "2"
-
-        url = f"https://haveibeenpwned.com/api/v{version}/breachedaccount/{qry}"
-        hdrs = {"Accept": f"application/vnd.haveibeenpwned.v{version}+json"}
+        url = f"https://haveibeenpwned.com/api/v3/breachedaccount/{qry}"
+        hdrs = {"Accept": "application/json"}
         retry = 0
 
-        if self.opts['api_key']:
-            hdrs['hibp-api-key'] = self.opts['api_key']
+        hdrs['hibp-api-key'] = self.opts['api_key']
 
         while retry < 2:
-            # https://haveibeenpwned.com/API/v2#RateLimiting
+            # https://haveibeenpwned.com/API/v3#RateLimiting
             time.sleep(1.5)
             res = self.sf.fetchUrl(url, timeout=self.opts['_fetchtimeout'],
                                    useragent="SpiderFoot", headers=hdrs)
@@ -129,7 +125,7 @@ class sfp_haveibeenpwned(SpiderFootPlugin):
         retry = 0
 
         while retry < 2:
-            # https://haveibeenpwned.com/API/v2#RateLimiting
+            # https://haveibeenpwned.com/API/v3#RateLimiting
             time.sleep(1.5)
             res = self.sf.fetchUrl(url, timeout=self.opts['_fetchtimeout'],
                                    useragent="SpiderFoot", headers=headers)

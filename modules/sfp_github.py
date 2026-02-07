@@ -28,7 +28,7 @@ class sfp_github(SpiderFootPlugin):
             'website': "https://github.com/",
             'model': "FREE_NOAUTH_UNLIMITED",
             'references': [
-                "https://developer.github.com/"
+                "https://docs.github.com/rest"
             ],
             'favIcon': "https://github.githubassets.com/favicons/favicon.png",
             'logo': "https://github.githubassets.com/favicons/favicon.png",
@@ -47,7 +47,9 @@ class sfp_github(SpiderFootPlugin):
         'namesonly': "Match repositories by name only, not by their descriptions. Helps reduce false positives."
     }
 
-    def setup(self, sfc, userOpts=dict()):
+    def setup(self, sfc, userOpts=None):
+        if userOpts is None:
+            userOpts = {}
         self.sf = sfc
         self.results = self.tempStorage()
 

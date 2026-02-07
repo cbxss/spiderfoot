@@ -1,16 +1,16 @@
-<%include file="HEADER.tmpl"/>
-<script src="${docroot}/static/js/spiderfoot.newscan.js"></script>
+{% include "header.html" %}
+<script src="{{ docroot }}/static/js/spiderfoot.newscan.js"></script>
 <h2>New Scan</h2>
 <div style='padding-top: 20px'>
-<form class="form" action='${docroot}/startscan' method='POST'>
+<form class="form" action='{{ docroot }}/startscan' method='POST'>
 <div class='col-sm-3' style='padding: 0'>
     <label for="scanname">Scan Name</label>
     <div class="input-group" style='padding-bottom: 10px'>
-        <input class='form-control' type="text" id="scanname" name="scanname" value="${scanname}" placeholder="The name of this scan.">
+        <input class='form-control' type="text" id="scanname" name="scanname" value="{{ scanname }}" placeholder="The name of this scan.">
     </div>
     <label for="scantarget">Scan Target</label>
     <div class="input-group">
-        <input class='form-control' type="text" value="${scantarget}" id="scantarget" name="scantarget" placeholder="The target of your scan.">
+        <input class='form-control' type="text" value="{{ scantarget }}" id="scantarget" name="scantarget" placeholder="The target of your scan.">
     </div>
 </div>
 <div class='col-sm-9' style='font-size: 12px; padding: 0; padding-left: 10px'>
@@ -54,40 +54,45 @@
         </table>
 
         <table class="table table-striped table-condensed" id="moduletable" style="display: none">
-            <%
-            modlist = dict()
-            for item in modules:
-                modlist[modules[item]['name']] = item
-            %>
-            % for it in sorted(modlist, key=lambda v: v.upper()):
-                <% item = modlist[it] %>
-                <% keylist = dict((k, v) for k, v in modules[item]['opts'].items() if not k.startswith('_')) %>
-                <% keyicon = "" %>
-                % if len(keylist) > 0:
-                    <% apikeylist = dict((k, v) for k, v in modules[item]['opts'].items() if k.find("api_key") >= 0) %>
-                    <%
-                    if len(apikeylist) > 0:
-                        keyicon = "&nbsp;&nbsp;<i class=\"glyphicon glyphicon-lock\" rel='tooltip' title='Needs API key'></i>"
-                    %>
-                % endif
+            {% set modlist = {} %}
+            {% for item in modules %}
+                {% set _ = modlist.update({modules[item]['name']: item}) %}
+            {% endfor %}
+            {% for it in modlist | sort(case_sensitive=false) %}
+                {% set item = modlist[it] %}
+                {% set keylist = modules[item]['opts'] | dictsort | selectattr('0', 'ne', '_') | list %}
+                {% set ns = namespace(keyicon="") %}
+                {% set filtered_opts = {} %}
+                {% for k, v in modules[item]['opts'].items() if not k.startswith('_') %}
+                    {% set _ = filtered_opts.update({k: v}) %}
+                {% endfor %}
+                {% if filtered_opts | length > 0 %}
+                    {% set api_opts = {} %}
+                    {% for k, v in modules[item]['opts'].items() if 'api_key' in k %}
+                        {% set _ = api_opts.update({k: v}) %}
+                    {% endfor %}
+                    {% if api_opts | length > 0 %}
+                        {% set ns.keyicon = "&nbsp;&nbsp;<i class=\"glyphicon glyphicon-lock\" rel='tooltip' title='Needs API key'></i>" %}
+                    {% endif %}
+                {% endif %}
 
-                % if item != "sfp__stor_db" and item != "sfp__stor_stdout":
-                    <tr><td><input type=checkbox id="module_${item}" checked></td><td>${modules[item]['name']}${keyicon}</td><td>${modules[item]['descr']}</td></tr>
-                % endif
-            % endfor
+                {% if item != "sfp__stor_db" and item != "sfp__stor_stdout" %}
+                    <tr><td><input type=checkbox id="module_{{ item }}" checked></td><td>{{ modules[item]['name'] }}{{ ns.keyicon }}</td><td>{{ modules[item]['descr'] }}</td></tr>
+                {% endif %}
+            {% endfor %}
         </table>
         <table class="table table-striped table-condensed" id="typetable" style="display: none">
-            <% count = 0 %>
-            % for item in sorted(types):
-                % if count % 2 == 0:
+            {% set count = namespace(val=0) %}
+            {% for item in types | sort %}
+                {% if count.val % 2 == 0 %}
                     <tr>
-                % endif
-                <td><input type=checkbox id="type_${item[1]}" checked></td><td>${item[0]}</td>
-                % if not count % 2 == 0:
+                {% endif %}
+                <td><input type=checkbox id="type_{{ item[1] }}" checked></td><td>{{ item[0] }}</td>
+                {% if not count.val % 2 == 0 %}
                     </tr>
-                % endif
-                <% count = count + 1 %>
-            % endfor
+                {% endif %}
+                {% set count.val = count.val + 1 %}
+            {% endfor %}
         </table>
     </div>
     <div class="control-group">
@@ -101,11 +106,12 @@
 </div>
 
 <script type='text/javascript'>
-  if ("${selectedmods}" != "") {
+  var selectedMods = "{{ selectedmods }}";
+  if (selectedMods != "") {
           switchTab("module");
 
           $("input[id^=module_]").each(function(id, obj) {
-              if ("${selectedmods}".indexOf(obj.id.replace("module_", "")) >= 0) {
+              if (selectedMods.indexOf(obj.id.replace("module_", "")) >= 0) {
                   $("#" + obj.id).attr("checked", true);
               } else {
                   $("#" + obj.id).attr("checked", false);
@@ -113,4 +119,4 @@
           });
   }
 </script>
-<%include file="FOOTER.tmpl"/>
+{% include "footer.html" %}

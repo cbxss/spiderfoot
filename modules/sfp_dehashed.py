@@ -9,7 +9,6 @@
 # Licence:     MIT
 # -------------------------------------------------------------------------------
 
-import base64
 import json
 import time
 
@@ -28,13 +27,13 @@ class sfp_dehashed(SpiderFootPlugin):
             'website': "https://www.dehashed.com/",
             'model': "COMMERCIAL_ONLY",
             'references': [
-                "https://www.dehashed.com/docs"
+                "https://www.dehashed.com/api"
             ],
             'apiKeyInstructions': [
-                "Visit https://www.dehashed.com/register"
-                "Register a free account",
+                "Visit https://www.dehashed.com/register",
+                "Register an account",
                 "Visit https://www.dehashed.com/profile",
-                "Your API key is listed under 'API Key'",
+                "Generate or refresh your API key under 'API Key'",
             ],
             'favIcon': "https://www.dehashed.com/assets/img/favicon.ico",
             'logo': "https://www.dehashed.com/assets/img/logo.png",
@@ -49,7 +48,6 @@ class sfp_dehashed(SpiderFootPlugin):
 
     # Default options
     opts = {
-        'api_key_username': '',
         'api_key': '',
         'per_page': 10000,
         'max_pages': 2,
@@ -58,17 +56,18 @@ class sfp_dehashed(SpiderFootPlugin):
 
     # Option descriptions
     optdescs = {
-        'api_key_username': 'Dehashed username.',
         'api_key': 'Dehashed API key.',
-        'per_page': 'Maximum number of results per page.(Max: 10000)',
-        'max_pages': 'Maximum number of pages to fetch(Max: 10 pages)',
+        'per_page': 'Maximum number of results per page (max: 10000).',
+        'max_pages': 'Maximum number of pages to fetch (max depth 10000).',
         'pause': 'Number of seconds to wait between each API call.'
     }
 
     results = None
     errorState = False
 
-    def setup(self, sfc, userOpts=dict()):
+    def setup(self, sfc, userOpts=None):
+        if userOpts is None:
+            userOpts = {}
         self.sf = sfc
         self.results = self.tempStorage()
 
@@ -94,18 +93,32 @@ class sfp_dehashed(SpiderFootPlugin):
 
     # Query Dehashed
     def query(self, event, per_page, start):
+        query_string = None
         if event.eventType == "EMAILADDR":
-            queryString = f"https://api.dehashed.com/search?query=email:\"{event.data}\"&page={start}&size={self.opts['per_page']}"
+            query_string = f'email:"{event.data}"'
         if event.eventType == "DOMAIN_NAME":
-            queryString = f"https://api.dehashed.com/search?query=email:\"@{event.data}\"&page={start}&size={self.opts['per_page']}"
+            query_string = f'email:"@{event.data}"'
 
-        token = (base64.b64encode(self.opts['api_key_username'].encode('utf8') + ":".encode('utf-8') + self.opts['api_key'].encode('utf-8'))).decode('utf-8')
+        if not query_string:
+            return None
+
         headers = {
             'Accept': 'application/json',
-            'Authorization': f'Basic {token}'
+            'Content-Type': 'application/json',
+            'Dehashed-Api-Key': self.opts['api_key']
         }
 
-        res = self.sf.fetchUrl(queryString,
+        payload = {
+            "query": query_string,
+            "page": start,
+            "size": per_page,
+            "wildcard": False,
+            "regex": False,
+            "de_dupe": False
+        }
+
+        res = self.sf.fetchUrl("https://api.dehashed.com/v2/search",
+                               postData=json.dumps(payload),
                                headers=headers,
                                timeout=15,
                                useragent=self.opts['_useragent'],
@@ -113,18 +126,28 @@ class sfp_dehashed(SpiderFootPlugin):
 
         time.sleep(self.opts['pause'])
 
-        if res['code'] == "400":
-            self.error("Too many requests were performed in a small amount of time. Please wait a bit before querying the API.")
+        if res['code'] == "429":
+            self.error("Dehashed rate limit hit (too many requests). Please wait before retrying.")
             time.sleep(5)
-            res = self.sf.fetchUrl(queryString, headers=headers, timeout=15, useragent=self.opts['_useragent'], verify=True)
+            res = self.sf.fetchUrl("https://api.dehashed.com/v2/search",
+                                   postData=json.dumps(payload),
+                                   headers=headers,
+                                   timeout=15,
+                                   useragent=self.opts['_useragent'],
+                                   verify=True)
 
         if res['code'] == "401":
-            self.error("Invalid API credentials")
+            self.error("Unauthorized: search subscription and credits required.")
+            self.errorState = True
+            return None
+
+        if res['code'] == "403":
+            self.error("Forbidden: insufficient credits.")
             self.errorState = True
             return None
 
         if res['code'] != "200":
-            self.error("Unable to fetch data from Dehashed.")
+            self.error(f"Unable to fetch data from Dehashed (HTTP {res['code']}).")
             self.errorState = True
             return None
 
@@ -157,8 +180,8 @@ class sfp_dehashed(SpiderFootPlugin):
 
         self.debug(f"Received event, {eventName}, from {srcModuleName}")
 
-        if self.opts['api_key'] == "" or self.opts['api_key_username'] == "":
-            self.error("You enabled sfp_dehashed but did not set an API key/API Key Username!")
+        if self.opts['api_key'] == "":
+            self.error("You enabled sfp_dehashed but did not set an API key!")
             self.errorState = True
             return
 
@@ -185,51 +208,56 @@ class sfp_dehashed(SpiderFootPlugin):
                 return
 
             for row in data.get('entries'):
-                email = row.get('email')
-                password = row.get('password')
-                passwordHash = row.get('hashed_password')
+                email_values = row.get('email')
+                password_values = row.get('password')
+                hash_values = row.get('hashed_password')
                 leakSource = row.get('database_name', 'Unknown')
 
-                if f"{email} [{leakSource}]" in breachResults:
-                    continue
+                emails = email_values if isinstance(email_values, list) else [email_values] if email_values else []
+                passwords = password_values if isinstance(password_values, list) else [password_values] if password_values else []
+                hashes = hash_values if isinstance(hash_values, list) else [hash_values] if hash_values else []
 
-                breachResults.add(f"{email} [{leakSource}]")
+                for email in emails:
+                    if f"{email} [{leakSource}]" in breachResults:
+                        continue
 
-                if eventName == "EMAILADDR":
-                    if email == eventData:
-                        evt = SpiderFootEvent('EMAILADDR_COMPROMISED', f"{email} [{leakSource}]", self.__name__, event)
-                        self.notifyListeners(evt)
+                    breachResults.add(f"{email} [{leakSource}]")
 
-                        if password:
-                            evt = SpiderFootEvent('PASSWORD_COMPROMISED', f"{email}:{password} [{leakSource}]", self.__name__, event)
+                    if eventName == "EMAILADDR":
+                        if email == eventData:
+                            evt = SpiderFootEvent('EMAILADDR_COMPROMISED', f"{email} [{leakSource}]", self.__name__, event)
                             self.notifyListeners(evt)
 
-                        if passwordHash:
-                            evt = SpiderFootEvent('HASH_COMPROMISED', f"{email}:{passwordHash} [{leakSource}]", self.__name__, event)
+                            for password in passwords[:1]:
+                                evt = SpiderFootEvent('PASSWORD_COMPROMISED', f"{email}:{password} [{leakSource}]", self.__name__, event)
+                                self.notifyListeners(evt)
+
+                            for passwordHash in hashes[:1]:
+                                evt = SpiderFootEvent('HASH_COMPROMISED', f"{email}:{passwordHash} [{leakSource}]", self.__name__, event)
+                                self.notifyListeners(evt)
+
+                            evt = SpiderFootEvent('RAW_RIR_DATA', str(row), self.__name__, event)
                             self.notifyListeners(evt)
 
-                        evt = SpiderFootEvent('RAW_RIR_DATA', str(row), self.__name__, event)
+                    if eventName == "DOMAIN_NAME":
+                        pevent = SpiderFootEvent("EMAILADDR", email, self.__name__, event)
+                        if email not in emailResults:
+                            self.notifyListeners(pevent)
+                            emailResults.add(email)
+
+                        evt = SpiderFootEvent('EMAILADDR_COMPROMISED', f"{email} [{leakSource}]", self.__name__, pevent)
                         self.notifyListeners(evt)
 
-                if eventName == "DOMAIN_NAME":
-                    pevent = SpiderFootEvent("EMAILADDR", email, self.__name__, event)
-                    if email not in emailResults:
-                        self.notifyListeners(pevent)
-                        emailResults.add(email)
+                        for password in passwords[:1]:
+                            evt = SpiderFootEvent('PASSWORD_COMPROMISED', f"{email}:{password} [{leakSource}]", self.__name__, pevent)
+                            self.notifyListeners(evt)
 
-                    evt = SpiderFootEvent('EMAILADDR_COMPROMISED', f"{email} [{leakSource}]", self.__name__, pevent)
-                    self.notifyListeners(evt)
+                        for passwordHash in hashes[:1]:
+                            evt = SpiderFootEvent('HASH_COMPROMISED', f"{email}:{passwordHash} [{leakSource}]", self.__name__, pevent)
+                            self.notifyListeners(evt)
 
-                    if password:
-                        evt = SpiderFootEvent('PASSWORD_COMPROMISED', f"{email}:{password} [{leakSource}]", self.__name__, pevent)
+                        evt = SpiderFootEvent('RAW_RIR_DATA', str(row), self.__name__, pevent)
                         self.notifyListeners(evt)
-
-                    if passwordHash:
-                        evt = SpiderFootEvent('HASH_COMPROMISED', f"{email}:{passwordHash} [{leakSource}]", self.__name__, pevent)
-                        self.notifyListeners(evt)
-
-                    evt = SpiderFootEvent('RAW_RIR_DATA', str(row), self.__name__, pevent)
-                    self.notifyListeners(evt)
 
             currentPage += 1
 

@@ -80,8 +80,7 @@ RUN mkdir -p "$VIRTUAL_ENV" || true
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN uv venv "$VIRTUAL_ENV"
 
-ARG REQUIREMENTS=requirements.txt
-COPY "$REQUIREMENTS" requirements.txt
+COPY pyproject.toml uv.lock ./
 
 RUN chown -R spiderfoot:spiderfoot /tools
 RUN chown -R spiderfoot:spiderfoot "$VIRTUAL_ENV"
@@ -89,7 +88,7 @@ RUN chown -R spiderfoot:spiderfoot "/home/spiderfoot"
 
 USER spiderfoot
 
-RUN uv pip install -r "$REQUIREMENTS"
+RUN uv pip install .
 
 # Install Python tools
 RUN uv pip install dnstwist
