@@ -15,6 +15,7 @@ import io
 import mimetypes
 
 import PyPDF2
+from PyPDF2 import PdfReader
 
 import docx
 
@@ -105,9 +106,8 @@ class sfp_filemeta(SpiderFootPlugin):
                 if fileExt.lower() == "pdf":
                     try:
                         raw = io.BytesIO(ret['content'])
-                        # data = metapdf.MetaPdfReader().read_metadata(raw)
-                        pdf = PyPDF2.PdfFileReader(raw, strict=False)
-                        data = pdf.getDocumentInfo()
+                        pdf = PdfReader(raw)
+                        data = pdf.metadata
                         meta = str(data)
                         self.debug("Obtained meta data from " + eventData)
                     except Exception as e:

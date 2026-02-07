@@ -13,7 +13,7 @@
 
 import json
 import os.path
-from subprocess import PIPE, Popen, TimeoutExpired
+from subprocess import PIPE, Popen
 
 from spiderfoot import SpiderFootEvent, SpiderFootPlugin, SpiderFootHelpers
 
@@ -121,6 +121,7 @@ class sfp_tool_whatweb(SpiderFootPlugin):
             self.opts['ruby_path'],
             exe,
             "--quiet",
+            "--no-errors",
             "--aggression=" + str(aggression),
             "--log-json=/dev/stdout",
             "--user-agent=Mozilla/5.0",
@@ -128,33 +129,44 @@ class sfp_tool_whatweb(SpiderFootPlugin):
             eventData
         ]
         try:
-            p = Popen(args, stdout=PIPE, stderr=PIPE, timeout=300)
+            p = Popen(args, stdout=PIPE, stderr=PIPE)
             stdout, stderr = p.communicate(input=None)
-        except TimeoutExpired:
-            p.kill()
-            stdout, stderr = p.communicate()
-            self.debug(f"Timed out waiting for WhatWeb to finish against {eventData}")
-            return
         except Exception as e:
             self.error(f"Unable to run WhatWeb: {e}")
             return
 
         if p.returncode != 0:
             self.error("Unable to read WhatWeb output.")
-            self.debug("Error running WhatWeb: " + stderr + ", " + stdout)
+            self.debug("Error running WhatWeb: " + stderr.decode('utf-8', errors='ignore') + ", " + stdout.decode('utf-8', errors='ignore'))
             return
 
         if not stdout:
             self.debug(f"WhatWeb returned no output for {eventData}")
             return
 
+        # Parse JSON output - WhatWeb returns one JSON object per line
+        result_json = []
         try:
-            result_json = json.loads(stdout)
+            stdout_str = stdout.decode('utf-8', errors='ignore').strip()
+
+            self.debug(f"WhatWeb output (first 500 chars): {stdout_str[:500]}")
+
+            for line in stdout_str.split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    result_json.append(json.loads(line))
+                except json.JSONDecodeError as e:
+                    self.debug(f"Failed to parse JSON line: {line[:100]} - Error: {e}")
+                    continue
+
         except Exception as e:
             self.error(f"Couldn't parse the JSON output of WhatWeb: {e}")
             return
 
         if len(result_json) == 0:
+            self.debug(f"No valid JSON results found for {eventData}")
             return
 
         blacklist = [
@@ -173,16 +185,20 @@ class sfp_tool_whatweb(SpiderFootPlugin):
                 continue
 
             if plugin_matches.get('HTTPServer'):
-                for w in plugin_matches.get('HTTPServer').get('string'):
-                    evt = SpiderFootEvent('WEBSERVER_BANNER', w, self.__name__, event)
-                    self.notifyListeners(evt)
-                    found = True
+                http_server_data = plugin_matches.get('HTTPServer')
+                if isinstance(http_server_data, dict) and http_server_data.get('string'):
+                    for w in http_server_data.get('string'):
+                        evt = SpiderFootEvent('WEBSERVER_BANNER', w, self.__name__, event)
+                        self.notifyListeners(evt)
+                        found = True
 
             if plugin_matches.get('X-Powered-By'):
-                for w in plugin_matches.get('X-Powered-By').get('string'):
-                    evt = SpiderFootEvent('WEBSERVER_TECHNOLOGY', w, self.__name__, event)
-                    self.notifyListeners(evt)
-                    found = True
+                x_powered_data = plugin_matches.get('X-Powered-By')
+                if isinstance(x_powered_data, dict) and x_powered_data.get('string'):
+                    for w in x_powered_data.get('string'):
+                        evt = SpiderFootEvent('WEBSERVER_TECHNOLOGY', w, self.__name__, event)
+                        self.notifyListeners(evt)
+                        found = True
 
             for plugin in plugin_matches:
                 if plugin in blacklist:
@@ -195,4 +211,4 @@ class sfp_tool_whatweb(SpiderFootPlugin):
             evt = SpiderFootEvent('RAW_RIR_DATA', str(result_json), self.__name__, event)
             self.notifyListeners(evt)
 
-# End of sfp_tool_whatweb class
+# End of sfp_tool_whatweb class.

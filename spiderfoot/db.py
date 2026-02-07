@@ -17,6 +17,9 @@ import re
 import sqlite3
 import threading
 import time
+import typing
+
+from .event import SpiderFootEvent
 
 
 class SpiderFootDb:
@@ -770,6 +773,8 @@ class SpiderFootDb:
         if by not in ["type", "module", "entity"]:
             raise ValueError(f"Invalid filter by value: {by}") from None
 
+        qry = ""
+
         if by == "type":
             qry = "SELECT r.type, e.event_descr, MAX(ROUND(generated)) AS last_in, \
                 count(*) AS total, count(DISTINCT r.data) as utotal FROM \
@@ -823,6 +828,8 @@ class SpiderFootDb:
 
         if by not in ["rule", "risk"]:
             raise ValueError(f"Invalid filter by value: {by}") from None
+
+        qry = ""
 
         if by == "risk":
             qry = "SELECT rule_risk, count(*) AS total FROM \
@@ -1337,7 +1344,7 @@ class SpiderFootDb:
             except sqlite3.Error as e:
                 raise IOError("SQL error encountered when fetching configuration") from e
 
-    def scanEventStore(self, instanceId: str, sfEvent, truncateSize: int = 0) -> None:
+    def scanEventStore(self, instanceId: str, sfEvent: SpiderFootEvent, truncateSize: int = 0) -> None:
         """Store an event in the database.
 
         Args:
@@ -1350,7 +1357,6 @@ class SpiderFootDb:
             ValueError: arg value was invalid
             IOError: database I/O failed
         """
-        from spiderfoot import SpiderFootEvent
 
         if not isinstance(instanceId, str):
             raise TypeError(f"instanceId is {type(instanceId)}; expected str()") from None
@@ -1662,6 +1668,9 @@ class SpiderFootDb:
                 # Prevent us from looping at root
                 if parentId != "ROOT":
                     keepGoing = True
+
+        assert parentId
+        assert row
 
         datamap[parentId] = row
         return [datamap, pc]
