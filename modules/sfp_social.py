@@ -15,21 +15,29 @@ import re
 from spiderfoot import SpiderFootEvent, SpiderFootPlugin
 
 regexps = dict({
-    "LinkedIn (Individual)": list(['.*linkedin.com/in/([a-zA-Z0-9_]+$)']),
-    "LinkedIn (Company)": list(['.*linkedin.com/company/([a-zA-Z0-9_]+$)']),
-    "Github": list([r'.*github.com/([a-zA-Z0-9_]+)\/']),
-    "Google+": list(['.*plus.google.com/([0-9]+$)']),
-    "Bitbucket": list([r'.*bitbucket.org/([a-zA-Z0-9_]+)\/']),
-    "Gitlab": list([r'.*gitlab.com/([a-zA-Z0-9_]+)\/']),
-    "Facebook": list(['.*facebook.com/([a-zA-Z0-9_]+$)']),
-    "MySpace": list([r'https?://myspace.com/([a-zA-Z0-9_\.]+$)']),
-    "YouTube": list(['.*youtube.com/([a-zA-Z0-9_]+$)']),
-    "Twitter": list([
-        '.*twitter.com/([a-zA-Z0-9_]{1,15}$)',
-        '.*twitter.com/#!/([a-zA-Z0-9_]{1,15}$)'
+    "LinkedIn (Individual)": list(['.*linkedin.com/in/([a-zA-Z0-9_-]+)/?$']),
+    "LinkedIn (Company)": list(['.*linkedin.com/company/([a-zA-Z0-9_-]+)/?$']),
+    "Github": list([r'.*github.com/([a-zA-Z0-9_-]+)/?$']),
+    "Bitbucket": list([r'.*bitbucket.org/([a-zA-Z0-9_-]+)/?$']),
+    "Gitlab": list([r'.*gitlab.com/([a-zA-Z0-9_-]+)/?$']),
+    "Facebook": list(['.*facebook.com/([a-zA-Z0-9_.]+)/?$']),
+    "Instagram": list([r'.*instagram.com/([a-zA-Z0-9_.]+)/?$']),
+    "TikTok": list([r'.*tiktok.com/@([a-zA-Z0-9_.]+)/?$']),
+    "YouTube": list([
+        r'.*youtube.com/@([a-zA-Z0-9_-]+)/?$',
+        r'.*youtube.com/c/([a-zA-Z0-9_-]+)/?$',
+        r'.*youtube.com/user/([a-zA-Z0-9_-]+)/?$',
     ]),
-    "SlideShare": list(['.*slideshare.net/([a-zA-Z0-9_]+$)']),
-    "Instagram": list([r'.*instagram.com/([a-zA-Z0-9_\.]+)/?$'])
+    "X/Twitter": list([
+        r'.*twitter.com/([a-zA-Z0-9_]{1,15})/?$',
+        r'.*x.com/([a-zA-Z0-9_]{1,15})/?$',
+    ]),
+    "Bluesky": list([r'.*bsky.app/profile/([a-zA-Z0-9_.-]+)/?$']),
+    "Mastodon": list([r'.*mastodon\.\w+/@([a-zA-Z0-9_]+)/?$']),
+    "Threads": list([r'.*threads.net/@([a-zA-Z0-9_.]+)/?$']),
+    "Reddit": list([r'.*reddit.com/u(?:ser)?/([a-zA-Z0-9_-]+)/?$']),
+    "Pinterest": list([r'.*pinterest.com/([a-zA-Z0-9_-]+)/?$']),
+    "Medium": list([r'.*medium.com/@([a-zA-Z0-9_.]+)/?$']),
 })
 
 
@@ -37,7 +45,7 @@ class sfp_social(SpiderFootPlugin):
 
     meta = {
         'name': "Social Network Identifier",
-        'summary': "Identify presence on social media networks such as LinkedIn, Twitter and others.",
+        'summary': "Identify presence on social media networks such as LinkedIn, TikTok, Bluesky and others.",
         'flags': [],
         'useCases': ["Footprint", "Passive"],
         'categories': ["Social Media"]
@@ -91,10 +99,8 @@ class sfp_social(SpiderFootPlugin):
                 )
                 self.notifyListeners(evt)
 
-                # Except for Google+, the link includes potential usernames
-                if regexpGrp != "Google+":
-                    un = bits.group(1)
-                    evt = SpiderFootEvent("USERNAME", str(un), self.__name__, event)
-                    self.notifyListeners(evt)
+                un = bits.group(1)
+                evt = SpiderFootEvent("USERNAME", str(un), self.__name__, event)
+                self.notifyListeners(evt)
 
 # End of sfp_social class

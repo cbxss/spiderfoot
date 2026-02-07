@@ -67,6 +67,21 @@ All associated unit and integration tests for removed modules were also removed.
 - **sfp_whoisfreaks** -- WhoisFreaks WHOIS/DNS lookup API
 - **sfp_ip2locationio** -- ip2location.io geolocation API
 
+### New Modules (wave 2)
+
+- **sfp_epss** -- FIRST.org Exploit Prediction Scoring System. Enriches every discovered CVE with its probability of being exploited in the next 30 days and its percentile rank. (free, no API key)
+- **sfp_cvedb** -- Shodan CVEDB vulnerability lookup. Adds CVSS scores, CISA KEV (Known Exploited Vulnerability) status, ransomware campaign data, affected CPEs, and references for discovered CVEs. (free, no API key)
+- **sfp_bluesky** -- Bluesky (AT Protocol) social media module. Searches posts mentioning target domains and looks up user profiles by username. (free, no API key)
+- **sfp_mastodon** -- Mastodon/Fediverse social media module. Searches posts and looks up user profiles on configurable Mastodon instances (default: mastodon.social). (free, no API key)
+- **sfp_reddit** -- Reddit social media module. Searches posts mentioning target domains and retrieves user profiles via the Reddit OAuth API. (free API key required -- create at reddit.com/prefs/apps)
+
+### Social Network Identifier Modernization
+
+The `sfp_social` module's URL regex list has been overhauled:
+- **Added:** TikTok, Bluesky, Mastodon, Threads, Reddit, Pinterest, Medium
+- **Updated:** YouTube (added @handle and /c/ patterns), Twitter (added x.com domain)
+- **Removed:** Google+ (shut down 2019), MySpace (dead), SlideShare (dead)
+
 ### Infrastructure
 
 - Migrated from `requirements.txt` to `pyproject.toml` (PEP 621)

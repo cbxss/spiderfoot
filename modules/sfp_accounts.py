@@ -106,7 +106,8 @@ class sfp_accounts(SpiderFootPlugin):
                 "SIMILAR_ACCOUNT_EXTERNAL"]
 
     def checkSite(self, name, site):
-        if 'check_uri' not in site:
+        check_uri = site.get('uri_check') or site.get('check_uri')
+        if not check_uri:
             return
 
         if site.get('strip_bad_char'):
@@ -114,7 +115,7 @@ class sfp_accounts(SpiderFootPlugin):
             for char in site['strip_bad_char']:
                 name = name.replace(char, "")
 
-        url = site['check_uri'].format(account=name)
+        url = check_uri.format(account=name)
         if 'uri_pretty' in site:
             ret_url = site['uri_pretty'].format(account=name)
         elif 'pretty_uri' in site:
@@ -142,19 +143,23 @@ class sfp_accounts(SpiderFootPlugin):
                 self.siteResults[retname] = False
             return
 
+        content = res['content']
+        if isinstance(content, bytes):
+            content = content.decode('utf-8', errors='ignore')
+
         if site.get('e_code') != site.get('m_code'):
             if res['code'] != str(site.get('e_code')):
                 with self.lock:
                     self.siteResults[retname] = False
                 return
 
-        if site.get('e_string') not in res['content'] or (site.get('m_string') and site.get('m_string') in res['content']):
+        if site.get('e_string') not in content or (site.get('m_string') and site.get('m_string') in content):
             with self.lock:
                 self.siteResults[retname] = False
             return
 
         if self.opts['musthavename']:
-            if name.lower() not in res['content'].lower():
+            if name.lower() not in content.lower():
                 self.debug(f"Skipping {site['name']} as username not mentioned.")
                 with self.lock:
                     self.siteResults[retname] = False

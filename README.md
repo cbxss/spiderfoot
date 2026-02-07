@@ -19,7 +19,7 @@ SpiderFoot has an embedded web-server for providing a clean and intuitive web-ba
 ### FEATURES
 
 - Web based UI or CLI
-- Over 200 modules (see below)
+- Over 215 modules (see below)
 - Python 3.10+
 - YAML-configurable [correlation engine](/correlations/README.md) with [37 pre-defined rules](/correlations)
 - CSV/JSON/GEXF export
@@ -50,7 +50,7 @@ You can target the following entities in a SpiderFoot scan:
  - Person's name
  - Bitcoin address
 
-SpiderFoot's 200+ modules feed each other in a publisher/subscriber model to ensure maximum data extraction to do things like:
+SpiderFoot's 215+ modules feed each other in a publisher/subscriber model to ensure maximum data extraction to do things like:
 
 - [Host/sub-domain/TLD enumeration/extraction](https://asciinema.org/a/295912)
 - [Email address, phone number and human name extraction](https://asciinema.org/a/295947)
@@ -112,7 +112,7 @@ Also take a look at the [template.yaml](/correlations/template.yaml) file for a 
 
 ### MODULES / INTEGRATIONS
 
-SpiderFoot has over 200 modules, most of which *don't require API keys*, and many of those that do require API keys *have a free tier*.
+SpiderFoot has over 215 modules, most of which *don't require API keys*, and many of those that do require API keys *have a free tier*.
 
 | Name     | Description | Type   |
 |:---------| :-----------|:-------|
@@ -138,6 +138,7 @@ Binary String Extractor|Attempt to identify strings in binary content.|Internal
 [Bing (Shared IPs)](https://www.bing.com/)|Search Bing for hosts sharing the same IP.|Tiered API
 [Bing](https://www.bing.com/)|Obtain information from bing to identify sub-domains and links.|Tiered API
 Bitcoin Finder|Identify bitcoin addresses in scraped webpages.|Internal
+[Bluesky](https://bsky.app/)|Search Bluesky for posts mentioning target domains and look up user profiles.|Free API
 [Blockchain](https://www.blockchain.com/)|Queries blockchain.info to find the balance of identified bitcoin wallet addresses.|Free API
 [blocklist.de](http://www.blocklist.de/en/index.html)|Check if a netblock or IP is malicious according to blocklist.de.|Free API
 [BotScout](https://botscout.com/)|Searches BotScout.com's database of spam-bot IP addresses and e-mail addresses.|Tiered API
@@ -160,6 +161,7 @@ Cookie Extractor|Extract Cookies from HTTP headers.|Internal
 Country Name Extractor|Identify country names in any obtained data.|Internal
 Credit Card Number Extractor|Identify Credit Card Numbers in any data|Internal
 Cross-Referencer|Identify whether other domains are associated ('Affiliates') of the target by looking for links back to the target site(s).|Internal
+[Shodan CVEDB](https://cvedb.shodan.io/)|Look up CVE details, CVSS scores, CISA KEV status, and affected products.|Free API
 Custom Threat Feed|Check if a host/domain, netblock, ASN or IP is malicious according to your custom feed.|Internal
 [CyberCrime-Tracker.net](https://cybercrime-tracker.net/)|Check if a host/domain or IP address is malicious according to CyberCrime-Tracker.net.|Free API
 [Debounce](https://debounce.io/)|Check whether an email is disposable|Free API
@@ -181,6 +183,7 @@ E-Mail Address Extractor|Identify e-mail addresses in any obtained data.|Interna
 [EmailFormat](https://www.email-format.com/)|Look up e-mail addresses on email-format.com.|Free API
 [EmailRep](https://emailrep.io/)|Search EmailRep.io for email address reputation.|Tiered API
 [Emerging Threats](https://rules.emergingthreats.net/)|Check if a netblock or IP address is malicious according to EmergingThreats.net.|Free API
+[EPSS](https://www.first.org/epss/)|Enrich CVE findings with EPSS exploit probability scores from FIRST.org.|Free API
 Error String Extractor|Identify common error messages in content like SQL errors, etc.|Internal
 Ethereum Address Extractor|Identify ethereum addresses in scraped webpages.|Internal
 [Etherscan](https://etherscan.io)|Queries etherscan.io to find the balance of identified ethereum wallet addresses.|Free API
@@ -233,6 +236,7 @@ Junk File Finder|Looks for old/temporary and other similar files.|Internal
 [LeakCheck (Public)](https://leakcheck.io/)|Search LeakCheck.io public API for breached email addresses.|Free API
 [LeakIX](https://leakix.net/)|Search LeakIX for host data leaks, open ports, software and geoip.|Free API
 [Leak-Lookup](https://leak-lookup.com/)|Searches Leak-Lookup.com's database of breaches.|Free API
+[Mastodon](https://mastodon.social/)|Search Mastodon/Fediverse for user profiles and posts mentioning target domains.|Free API
 [Maltiverse](https://maltiverse.com)|Obtain information about any malicious activities involving IP addresses|Free API
 [MalwarePatrol](https://www.malwarepatrol.net/)|Searches malwarepatrol.net's database of malicious URLs/IPs.|Tiered API
 [MetaDefender](https://metadefender.opswat.com/)|Search MetaDefender API for IP address and domain IP reputation.|Tiered API
@@ -260,6 +264,7 @@ Port Scanner - TCP|Scans for commonly open TCP ports on Internet-facing systems.
 [Pulsedive](https://pulsedive.com/)|Obtain information from Pulsedive's API.|Tiered API
 [PunkSpider](https://punkspider.io/)|Check the QOMPLX punkspider.io service to see if the target is listed as vulnerable.|Free API
 [Quad9](https://quad9.net/)|Check if a host would be blocked by Quad9 DNS.|Free API
+[Reddit](https://www.reddit.com/)|Search Reddit for posts mentioning target domains and look up user profiles.|Tiered API
 [ReverseWhois](https://www.reversewhois.io/)|Reverse Whois lookups using reversewhois.io.|Free API
 [RIPE](https://www.ripe.net/)|Queries the RIPE registry (includes ARIN data) to identify netblocks and other info.|Free API
 [Robtex](https://www.robtex.com/)|Search Robtex.com for hosts sharing the same IP.|Free API
@@ -271,7 +276,7 @@ Similar Domain Finder|Search various sources to identify similar looking domain 
 [Snov](https://snov.io/)|Gather available email IDs from identified domains|Tiered API
 [Social Links](https://sociallinks.io/)|Queries SocialLinks.io to gather intelligence from social media platforms and dark web.|Commercial API
 [Social Media Profile Finder](https://developers.google.com/custom-search)|Tries to discover the social media profiles for human names identified.|Tiered API
-Social Network Identifier|Identify presence on social media networks such as LinkedIn, Twitter and others.|Internal
+Social Network Identifier|Identify presence on social media networks such as LinkedIn, TikTok, Bluesky and others.|Internal
 [SpamCop](https://www.spamcop.net/)|Check if a netblock or IP address is in the SpamCop database.|Free API
 [Spamhaus Zen](https://www.spamhaus.org/)|Check if a netblock or IP address is in the Spamhaus Zen database.|Free API
 [spur.us](https://spur.us/)|Obtain information about any malicious activities involving IP addresses found|Commercial API
