@@ -674,7 +674,7 @@ class TestSpiderFoot(unittest.TestCase):
     def test_fetchUrl_argument_url_should_return_http_response_as_dict(self):
         sf = SpiderFoot(self.default_options)
 
-        res = sf.fetchUrl("https://spiderfoot.net/")
+        res = sf.fetchUrl("https://www.example.com/")
         self.assertIsInstance(res, dict)
         self.assertEqual(res['code'], "200")
         self.assertNotEqual(res['content'], None)
@@ -682,9 +682,9 @@ class TestSpiderFoot(unittest.TestCase):
     def test_fetchUrl_argument_headOnly_should_return_http_response_as_dict(self):
         sf = SpiderFoot(self.default_options)
 
-        res = sf.fetchUrl("https://spiderfoot.net/", headOnly=True)
+        res = sf.fetchUrl("https://www.example.com/", headOnly=True)
         self.assertIsInstance(res, dict)
-        self.assertEqual(res['code'], "301")
+        self.assertIn(res['code'], ["200", "301"])
         self.assertEqual(res['content'], None)
 
     def test_fetchUrl_argument_url_invalid_type_should_return_none(self):

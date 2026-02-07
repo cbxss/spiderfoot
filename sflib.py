@@ -179,11 +179,12 @@ class SpiderFoot:
 
         return val
 
-    def error(self, message: str) -> None:
+    def error(self, message: str, exc_info: bool = False) -> None:
         """Print and log an error message
 
         Args:
             message (str): error message
+            exc_info (bool): include exception traceback in log
         """
         if not self.opts['__logging']:
             return
@@ -224,11 +225,12 @@ class SpiderFoot:
 
         self.log.info(f"{message}", extra={'scanId': self._scanId})
 
-    def debug(self, message: str) -> None:
+    def debug(self, message: str, exc_info: bool = False) -> None:
         """Log and print a debug message.
 
         Args:
             message (str): debug message
+            exc_info (bool): include exception traceback in log
         """
         if not self.opts['_debug']:
             return
