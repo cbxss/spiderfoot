@@ -34,6 +34,9 @@ class TestModuleAccounts(unittest.TestCase):
         """Create a configured sfp_accounts module with mocked SpiderFoot."""
         sf = SpiderFoot(self.default_options)
         module = sfp_accounts()
+        # Reset opts to a fresh copy to avoid polluting the class-level
+        # mutable default dict (which would break test_modules.py assertions).
+        module.opts = dict(module.opts)
         module.setup(sf, {
             '_fetchtimeout': 5,
             '_useragent': 'SpiderFoot',
