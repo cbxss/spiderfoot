@@ -57,8 +57,8 @@ class SpiderFootHttp:
         }
 
         ret = url
-        for pat in pats:
-            ret = re.sub(pat, pats[pat], ret, re.IGNORECASE)
+        for pat, repl in pats.items():
+            ret = re.sub(pat, repl, ret, flags=re.IGNORECASE)
 
         return ret
 
@@ -163,7 +163,7 @@ class SpiderFootHttp:
             self._sf.debug(f"Could not parse URL: {url}")
             return None
 
-        if parsed_url.scheme != 'http' and parsed_url.scheme != 'https':
+        if parsed_url.scheme not in ('http', 'https'):
             self._sf.debug(f"Invalid URL scheme for URL: {url}")
             return None
 
@@ -186,8 +186,8 @@ class SpiderFootHttp:
 
         # Add custom headers
         if isinstance(headers, dict):
-            for k in list(headers.keys()):
-                header[k] = str(headers[k])
+            for k, v in headers.items():
+                header[k] = str(v)
 
         request_log.append(f"proxy={self._sf.socksProxy}")
         request_log.append(f"user-agent={header['User-Agent']}")

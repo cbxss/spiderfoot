@@ -8,6 +8,7 @@ dist
 *.swp
 
 venv/
+.venv/
 cache/
 log/
 spiderfoot.db*
@@ -16,3 +17,5 @@ spiderfoot.test.db
 __pycache__
 htmlcov/
 docs/
+test/
+*.md

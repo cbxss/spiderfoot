@@ -6,7 +6,6 @@ import os.path
 import random
 import re
 import ssl
-import sys
 import typing
 import urllib.parse
 import uuid
@@ -19,53 +18,40 @@ from networkx.readwrite.gexf import GEXFWriter
 import phonenumbers
 
 
-if sys.version_info >= (3, 8):  # PEP 589 support (TypedDict)
-    class _GraphNode(typing.TypedDict):
-        id: str  # noqa: A003
-        label: str
-        x: int
-        y: int
-        size: str
-        color: str
+class _GraphNode(typing.TypedDict):
+    id: str  # noqa: A003
+    label: str
+    x: int
+    y: int
+    size: str
+    color: str
 
-    class _GraphEdge(typing.TypedDict):
-        id: str  # noqa: A003
-        source: str
-        target: str
 
-    class _Graph(typing.TypedDict, total=False):
-        nodes: typing.List[_GraphNode]
-        edges: typing.List[_GraphEdge]
+class _GraphEdge(typing.TypedDict):
+    id: str  # noqa: A003
+    source: str
+    target: str
 
-    class Tree(typing.TypedDict):
-        name: str
-        children: typing.Optional[typing.List["Tree"]]
 
-    class ExtractedLink(typing.TypedDict):
-        source: str
-        original: str
-else:
-    _GraphNode = typing.Dict[str, typing.Union[str, int]]
+class _Graph(typing.TypedDict, total=False):
+    nodes: typing.List[_GraphNode]
+    edges: typing.List[_GraphEdge]
 
-    _GraphEdge = typing.Dict[str, str]
 
-    _GraphObject = typing.Union[_GraphNode, _GraphEdge]
+class Tree(typing.TypedDict):
+    name: str
+    children: typing.Optional[typing.List["Tree"]]
 
-    _Graph = typing.Dict[str, typing.List[_GraphObject]]
 
-    _Tree_name = str
-
-    _Tree_children = typing.Optional[typing.List["Tree"]]
-
-    Tree = typing.Dict[str, typing.Union[_Tree_name, _Tree_children]]
-
-    ExtractedLink = typing.Dict[str, str]
+class ExtractedLink(typing.TypedDict):
+    source: str
+    original: str
 
 
 EmptyTree = typing.Dict[None, object]
 
 
-class SpiderFootHelpers():
+class SpiderFootHelpers:
     """SpiderFoot helper functions.
 
     This class is used to store static helper functions which are
@@ -203,7 +189,7 @@ class SpiderFootHelpers():
                 continue
 
             ruleName = filename.split('.')[0]
-            with open(path + filename, 'r') as f:
+            with open(os.path.join(path, filename), 'r') as f:
                 correlationRulesRaw[ruleName] = f.read()
 
         return correlationRulesRaw
@@ -223,24 +209,23 @@ class SpiderFootHelpers():
 
         # NOTE: the regex order is important
         regexToType = [
-            {r"^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$": "IP_ADDRESS"},
-            {r"^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/\d+$": "NETBLOCK_OWNER"},
-            {r"^.*@.*$": "EMAILADDR"},
-            {r"^\+[0-9]+$": "PHONE_NUMBER"},
-            {r"^\".+\s+.+\"$": "HUMAN_NAME"},
-            {r"^\".+\"$": "USERNAME"},
-            {r"^[0-9]+$": "BGP_AS_OWNER"},
-            {r"^[0-9a-f:]+$": "IPV6_ADDRESS"},
-            {r"^[0-9a-f:]+::/[0-9]+$": "NETBLOCKV6_OWNER"},
-            {r"^(([a-z0-9]|[a-z0-9][a-z0-9\-]*[a-z0-9])\.)+([a-z0-9]|[a-z0-9][a-z0-9\-]*[a-z0-9])$": "INTERNET_NAME"},
-            {r"^(bc(0([ac-hj-np-z02-9]{39}|[ac-hj-np-z02-9]{59})|1[ac-hj-np-z02-9]{8,87})|[13][a-km-zA-HJ-NP-Z1-9]{25,35})$": "BITCOIN_ADDRESS"},
+            (r"^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$", "IP_ADDRESS"),
+            (r"^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/\d+$", "NETBLOCK_OWNER"),
+            (r"^.*@.*$", "EMAILADDR"),
+            (r"^\+[0-9]+$", "PHONE_NUMBER"),
+            (r"^\".+\s+.+\"$", "HUMAN_NAME"),
+            (r"^\".+\"$", "USERNAME"),
+            (r"^[0-9]+$", "BGP_AS_OWNER"),
+            (r"^[0-9a-f:]+$", "IPV6_ADDRESS"),
+            (r"^[0-9a-f:]+::/[0-9]+$", "NETBLOCKV6_OWNER"),
+            (r"^(([a-z0-9]|[a-z0-9][a-z0-9\-]*[a-z0-9])\.)+([a-z0-9]|[a-z0-9][a-z0-9\-]*[a-z0-9])$", "INTERNET_NAME"),
+            (r"^(bc(0([ac-hj-np-z02-9]{39}|[ac-hj-np-z02-9]{59})|1[ac-hj-np-z02-9]{8,87})|[13][a-km-zA-HJ-NP-Z1-9]{25,35})$", "BITCOIN_ADDRESS"),
         ]
 
         # Parse the target and set the target type
-        for rxpair in regexToType:
-            rx = list(rxpair.keys())[0]
+        for rx, target_type in regexToType:
             if re.match(rx, target, re.IGNORECASE | re.UNICODE):
-                return list(rxpair.values())[0]
+                return target_type
 
         return None
 
@@ -460,7 +445,7 @@ class SpiderFootHelpers():
             }
 
             if dst not in nodelist:
-                ncounter = ncounter + 1
+                ncounter += 1
                 if dst in root:
                     color['r'] = 255
                 graph.add_node(dst)
@@ -468,7 +453,7 @@ class SpiderFootHelpers():
                 nodelist[dst] = ncounter
 
             if src not in nodelist:
-                ncounter = ncounter + 1
+                ncounter += 1
                 if src in root:
                     color['r'] = 255
                 graph.add_node(src)
@@ -512,7 +497,7 @@ class SpiderFootHelpers():
                 continue
 
             if dst not in nodelist:
-                ncounter = ncounter + 1
+                ncounter += 1
 
                 if dst in root:
                     col = "#f00"
@@ -529,7 +514,7 @@ class SpiderFootHelpers():
                 nodelist[dst] = ncounter
 
             if src not in nodelist:
-                ncounter = ncounter + 1
+                ncounter += 1
 
                 if src in root:
                     col = "#f00"
@@ -545,7 +530,7 @@ class SpiderFootHelpers():
 
                 nodelist[src] = ncounter
 
-            ecounter = ecounter + 1
+            ecounter += 1
 
             ret['edges'].append({
                 'id': str(ecounter),
@@ -656,7 +641,7 @@ class SpiderFootHelpers():
         def get_children(needle: str, haystack: typing.Dict[str, typing.Optional[typing.List[str]]]) -> typing.Optional[typing.List[Tree]]:
             ret: typing.List[Tree] = list()
 
-            if needle not in list(haystack.keys()):
+            if needle not in haystack:
                 return None
 
             if haystack[needle] is None:
@@ -668,12 +653,12 @@ class SpiderFootHelpers():
 
         # Find the element with no parents, that's our root.
         root = None
-        for k in list(data.keys()):
+        for k in data:
             if data[k] is None:
                 continue
 
             contender = True
-            for ck in list(data.keys()):
+            for ck in data:
                 if data[ck] is None:
                     continue
 
@@ -819,7 +804,7 @@ class SpiderFootHelpers():
         links: typing.List[typing.Union[typing.List[str], str]] = []
 
         try:
-            for t in list(tags.keys()):
+            for t in tags:
                 for lnk in BeautifulSoup(data, features="lxml", parse_only=SoupStrainer(t)).find_all(t):
                     if lnk.has_attr(tags[t]):
                         links.append(lnk[tags[t]])
@@ -1051,7 +1036,7 @@ class SpiderFootHelpers():
 
             countryCode = iban[0:2]
 
-            if countryCode not in ibanCountryLengths.keys():
+            if countryCode not in ibanCountryLengths:
                 continue
 
             if len(iban) != ibanCountryLengths[countryCode]:
@@ -1488,15 +1473,12 @@ class SpiderFootHelpers():
         if not extra:
             extra = []
 
-        chars = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
-                 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-                 '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '.']
-
+        allowed = set('-.')
         if extra:
-            chars.extend(extra)
+            allowed.update(extra)
 
         for c in cmd:
-            if c.lower() not in chars:
+            if not c.isalnum() and c not in allowed:
                 return False
 
         if '..' in cmd:

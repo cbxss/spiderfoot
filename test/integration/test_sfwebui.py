@@ -79,12 +79,12 @@ class TestSpiderFootWebUiRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_rerunscan(self):
-        response = self.client.get("/rerunscan?id=doesnotexist")
+        response = self.client.post("/rerunscan", data={"id": "doesnotexist"})
         self.assertEqual(response.status_code, 200)
         self.assertIn("Invalid scan ID.", response.text)
 
     def test_rerunscanmulti_invalid_scan_id_returns_200(self):
-        response = self.client.get("/rerunscanmulti?ids=doesnotexist")
+        response = self.client.post("/rerunscanmulti", data={"ids": "doesnotexist"})
         self.assertEqual(response.status_code, 200)
         self.assertIn("Invalid scan ID.", response.text)
 
@@ -126,7 +126,7 @@ class TestSpiderFootWebUiRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_scandelete_invalid_scan_id_returns_404(self):
-        response = self.client.get("/scandelete?id=doesnotexist")
+        response = self.client.post("/scandelete", data={"id": "doesnotexist"})
         self.assertEqual(response.status_code, 404)
         self.assertIn('Scan doesnotexist does not exist', response.text)
 
@@ -199,7 +199,7 @@ class TestSpiderFootWebUiRoutes(unittest.TestCase):
         self.assertIn(response.status_code, [302, 303, 200])
 
     def test_stopscan_invalid_scan_id_returns_404(self):
-        response = self.client.get("/stopscan?id=doesnotexist")
+        response = self.client.post("/stopscan", data={"id": "doesnotexist"})
         self.assertEqual(response.status_code, 404)
         self.assertIn('Scan doesnotexist does not exist', response.text)
 

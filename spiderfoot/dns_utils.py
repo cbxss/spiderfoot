@@ -172,7 +172,7 @@ class SpiderFootDns:
             return False
 
         randpool = 'bcdfghjklmnpqrstvwxyz3456789'
-        randhost = ''.join([random.SystemRandom().choice(randpool) for x in range(10)])
+        randhost = ''.join(random.SystemRandom().choice(randpool) for _ in range(10))
 
         if not self.resolveHost(randhost + "." + target):
             return False

@@ -83,12 +83,10 @@ class SpiderFootDomain:
             self._sf.error(f"Invalid domain list: {domainList}")
             return set()
 
-        keywords = list()
-        for domain in domainList:
-            keywords.append(self.domainKeyword(domain, tldList))
+        keywords = [self.domainKeyword(domain, tldList) for domain in domainList]
 
         self._sf.debug(f"Keywords: {keywords}")
-        return set([k for k in keywords if k])
+        return {k for k in keywords if k}
 
     def hostDomain(self, hostname: str, tldList: list) -> str:
         """Obtain the domain name for a supplied hostname.

@@ -33,7 +33,7 @@ document.addEventListener("DOMContentLoaded", () => {
       localStorage.setItem("mode", "Dark Mode");
       link.rel = "stylesheet";
       link.type = "text/css";
-      link.href = "${docroot}/static/css/spiderfoot.css";
+      link.href = "/static/css/spiderfoot.css";
 
       head.appendChild(link);
       location.reload();
@@ -42,7 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
       localStorage.setItem("mode", "Light Mode");
       link.rel = "stylesheet";
       link.type = "text/css";
-      link.href = "${docroot}/static/css/dark.css";
+      link.href = "/static/css/dark.css";
 
       head.appendChild(link);
       location.reload();
@@ -51,6 +51,16 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 var sf = {};
+
+sf.escapeHtml = function(str) {
+    if (str == null) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+};
 
 sf.replace_sfurltag = function (data) {
   if (data.toLowerCase().indexOf("&lt;sfurl&gt;") >= 0) {
@@ -91,32 +101,34 @@ sf.search = function (scan_id, value, type, postFunc) {
 
 sf.deleteScan = function(scan_id, callback) {
     var req = $.ajax({
-      type: "GET",
-      url: docroot + "/scandelete?id=" + scan_id
+      type: "POST",
+      url: docroot + "/scandelete",
+      data: { id: scan_id }
     });
     req.done(function() {
-        alertify.success('<i class="glyphicon glyphicon-ok-circle"></i> <b>Scans Deleted</b><br/><br/>' + scan_id.replace(/,/g, "<br/>"));
+        alertify.success('<i class="glyphicon glyphicon-ok-circle"></i> <b>Scans Deleted</b><br/><br/>' + sf.escapeHtml(scan_id).replace(/,/g, "<br/>"));
         sf.log("Deleted scans: " + scan_id);
         callback();
     });
     req.fail(function (hr, textStatus, errorThrown) {
-        alertify.error('<i class="glyphicon glyphicon-minus-sign"></i> <b>Error</b><br/></br>' + hr.responseText);
+        alertify.error('<i class="glyphicon glyphicon-minus-sign"></i> <b>Error</b><br/></br>' + sf.escapeHtml(hr.responseText));
         sf.log("Error deleting scans: " + scan_id + ": " + hr.responseText);
     });
 };
 
 sf.stopScan = function(scan_id, callback) {
     var req = $.ajax({
-      type: "GET",
-      url: docroot + "/stopscan?id=" + scan_id
+      type: "POST",
+      url: docroot + "/stopscan",
+      data: { id: scan_id }
     });
     req.done(function() {
-        alertify.success('<i class="glyphicon glyphicon-ok-circle"></i> <b>Scans Aborted</b><br/><br/>' + scan_id.replace(/,/g, "<br/>"));
+        alertify.success('<i class="glyphicon glyphicon-ok-circle"></i> <b>Scans Aborted</b><br/><br/>' + sf.escapeHtml(scan_id).replace(/,/g, "<br/>"));
         sf.log("Aborted scans: " + scan_id);
         callback();
     });
     req.fail(function (hr, textStatus, errorThrown) {
-        alertify.error('<i class="glyphicon glyphicon-minus-sign"></i> <b>Error</b><br/><br/>' + hr.responseText);
+        alertify.error('<i class="glyphicon glyphicon-minus-sign"></i> <b>Error</b><br/><br/>' + sf.escapeHtml(hr.responseText));
         sf.log("Error stopping scans: " + scan_id + ": " + hr.responseText);
     });
 };

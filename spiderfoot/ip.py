@@ -77,18 +77,8 @@ class SpiderFootIp:
         if not SpiderFootIp.validIP(ip) and not SpiderFootIp.validIP6(ip):
             return False
 
-        if not netaddr.IPAddress(ip).is_unicast():
-            return False
-
-        if netaddr.IPAddress(ip).is_loopback():
-            return False
-        if netaddr.IPAddress(ip).is_reserved():
-            return False
-        if netaddr.IPAddress(ip).is_multicast():
-            return False
-        if netaddr.IPAddress(ip).is_private():
-            return False
-        return True
+        addr = netaddr.IPAddress(ip)
+        return addr.is_unicast() and not (addr.is_loopback() or addr.is_reserved() or addr.is_multicast() or addr.is_private())
 
     @staticmethod
     def isValidLocalOrLoopbackIp(ip: str) -> bool:
@@ -103,10 +93,5 @@ class SpiderFootIp:
         if not SpiderFootIp.validIP(ip) and not SpiderFootIp.validIP6(ip):
             return False
 
-        if netaddr.IPAddress(ip).is_private():
-            return True
-
-        if netaddr.IPAddress(ip).is_loopback():
-            return True
-
-        return False
+        addr = netaddr.IPAddress(ip)
+        return addr.is_private() or addr.is_loopback()

@@ -49,7 +49,7 @@ class SpiderFoot:
     _dbh = None
     _scanId = None
     _socksProxy = None
-    opts = dict()
+    opts = None
 
     def __init__(self, options: dict) -> None:
         """Initialize SpiderFoot object.
@@ -228,7 +228,7 @@ class SpiderFoot:
             str: SHA256 hash
         """
         s = string
-        if type(string) in [list, dict]:
+        if isinstance(string, (list, dict)):
             s = str(string)
         return hashlib.sha256(s.encode('raw_unicode_escape')).hexdigest()
 

@@ -33,7 +33,7 @@ class SpiderFootModuleIntrospection:
         if not loaded_modules:
             return modlist
 
-        for mod in list(loaded_modules.keys()):
+        for mod in loaded_modules:
             provides = loaded_modules[mod].get('provides')
 
             if not provides:
@@ -67,7 +67,7 @@ class SpiderFootModuleIntrospection:
         if not loaded_modules:
             return modlist
 
-        for mod in list(loaded_modules.keys()):
+        for mod in loaded_modules:
             consumes = loaded_modules[mod].get('consumes')
 
             if not consumes:
@@ -103,7 +103,7 @@ class SpiderFootModuleIntrospection:
             return evtlist
 
         for mod in modules:
-            if mod in list(loaded_modules.keys()):
+            if mod in loaded_modules:
                 provides = loaded_modules[mod].get('provides')
                 if provides:
                     for evt in provides:
@@ -131,7 +131,7 @@ class SpiderFootModuleIntrospection:
             return evtlist
 
         for mod in modules:
-            if mod in list(loaded_modules.keys()):
+            if mod in loaded_modules:
                 consumes = loaded_modules[mod].get('consumes')
                 if consumes:
                     for evt in consumes:

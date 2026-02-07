@@ -148,16 +148,7 @@ class SpiderFootSSL:
                 self._sf.debug(f"Checking for {fqdn} in certificate subject")
                 fqdn_tld = ".".join(fqdn.split(".")[1:]).lower()
 
-                found = False
-                for chost in certhosts:
-                    if chost == fqdn:
-                        found = True
-                    if chost == "*." + fqdn_tld:
-                        found = True
-                    if chost == fqdn_tld:
-                        found = True
-
-                if not found:
+                if not any(chost in (fqdn, fqdn_tld, "*." + fqdn_tld) for chost in certhosts):
                     ret['mismatch'] = True
             except BaseException as e:
                 self._sf.error(f"Error processing certificate: {e}")

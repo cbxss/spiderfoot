@@ -3,7 +3,7 @@ import random
 import time
 
 
-class SpiderFootEvent():
+class SpiderFootEvent:
     """SpiderFootEvent object representing identified data and associated meta data.
 
     Attributes:

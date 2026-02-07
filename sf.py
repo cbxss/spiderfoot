@@ -42,7 +42,6 @@ def main() -> None:
         'host': '127.0.0.1',
         'port': 5001,
         'root': '/',
-        'cors_origins': [],
     }
 
     # 'Global' configuration options
@@ -472,7 +471,7 @@ def start_web_server(sfWebUiConfig: dict, sfConfig: dict, loggingQueue=None) -> 
 
     # Check for passwd file (authentication)
     passwd_file = SpiderFootHelpers.dataPath() + '/passwd'
-    has_auth = False
+    credentials = {}
     if os.path.isfile(passwd_file):
         if not os.access(passwd_file, os.R_OK):
             log.error("Could not read passwd file. Permission denied.")
@@ -492,9 +491,9 @@ def start_web_server(sfWebUiConfig: dict, sfConfig: dict, loggingQueue=None) -> 
             if not u or not p:
                 log.error("Incorrect format of passwd file, must be username:password on each line.")
                 sys.exit(-1)
-            has_auth = True
+            credentials[u] = p
 
-    if not has_auth:
+    if not credentials:
         warn_msg = "\n********************************************************************\n"
         warn_msg += "Warning: passwd file contains no passwords. Authentication disabled.\n"
         warn_msg += "Please consider adding authentication to protect this instance!\n"
@@ -535,7 +534,7 @@ def start_web_server(sfWebUiConfig: dict, sfConfig: dict, loggingQueue=None) -> 
     print("*************************************************************")
     print("")
 
-    app = create_app(sfWebUiConfig, sfConfig, loggingQueue)
+    app = create_app(sfWebUiConfig, sfConfig, loggingQueue, credentials=credentials or None)
     uvicorn.run(app, host=web_host, port=web_port, log_level="info", **ssl_kwargs)
 
 
@@ -558,30 +557,8 @@ def handle_abort(signal, frame) -> None:
 
 
 if __name__ == '__main__':
-    if sys.version_info < (3, 7):
-        print("SpiderFoot requires Python 3.7 or higher.")
-        sys.exit(-1)
-
     if len(sys.argv) <= 1:
         print("SpiderFoot requires -l <ip>:<port> to start the web server. Try --help for guidance.")
-        sys.exit(-1)
-
-    # TODO: remove this after a few releases (added in 3.5 pre-release 2021-09-05)
-    from pathlib import Path
-    if os.path.exists('spiderfoot.db'):
-        print(f"ERROR: spiderfoot.db file exists in {os.path.dirname(__file__)}")
-        print("SpiderFoot no longer supports loading the spiderfoot.db database from the application directory.")
-        print(f"The database is now loaded from your home directory: {Path.home()}/.spiderfoot/spiderfoot.db")
-        print(f"This message will go away once you move or remove spiderfoot.db from {os.path.dirname(__file__)}")
-        sys.exit(-1)
-
-    # TODO: remove this after a few releases (added in 3.5 pre-release 2021-09-05)
-    from pathlib import Path
-    if os.path.exists('passwd'):
-        print(f"ERROR: passwd file exists in {os.path.dirname(__file__)}")
-        print("SpiderFoot no longer supports loading credentials from the application directory.")
-        print(f"The passwd file is now loaded from your home directory: {Path.home()}/.spiderfoot/passwd")
-        print(f"This message will go away once you move or remove passwd from {os.path.dirname(__file__)}")
         sys.exit(-1)
 
     main()

@@ -19,6 +19,7 @@ import json
 import os
 import re
 import shlex
+import subprocess
 import sys
 import time
 from os.path import expanduser
@@ -1326,7 +1327,7 @@ class SpiderFootCli(cmd.Cmd):
         """shell
         Run a shell command locally."""
         self.dprint("Running shell command:" + str(line))
-        self.dprint(os.popen(line).read(), plain=True)  # noqa: DUO106
+        self.dprint(subprocess.run(line, shell=True, capture_output=True, text=True).stdout, plain=True)  # noqa: S603
 
     def do_clear(self, line):
         """clear

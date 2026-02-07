@@ -10,21 +10,23 @@
 # License:      MIT
 # -----------------------------------------------------------------
 import csv
+import hashlib
 import html
 import json
-import logging
 import multiprocessing as mp
 import os
 import random
 import re
+import secrets
 import time
 from copy import deepcopy
 from io import StringIO
 from operator import itemgetter
 from typing import Optional
 
-from fastapi import FastAPI, Form, Query, Request, UploadFile, File
+from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -34,7 +36,7 @@ from sflib import SpiderFoot
 from spiderfoot import SpiderFootDb, SpiderFootHelpers, __version__
 from spiderfoot.services import (
     ScanService, ConfigService, DataService,
-    build_excel, clean_user_input,
+    build_excel,
 )
 from spiderfoot.logger import logListenerSetup, logWorkerSetup
 
@@ -63,13 +65,15 @@ def _urlize_step(text):
     )
 
 
-def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
+def create_app(web_config: dict, config: dict, logging_queue=None, credentials: dict = None) -> FastAPI:
     """Create and configure the FastAPI application.
 
     Args:
         web_config: config settings for web interface (interface, port, root path)
         config: SpiderFoot config
         logging_queue: main SpiderFoot logging queue
+        credentials: dict of {username: sha256_hex_digest} for HTTP Basic Auth.
+                     If None or empty, authentication is disabled.
 
     Returns:
         FastAPI: configured application instance
@@ -121,6 +125,27 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
 
     app = FastAPI(title="SpiderFoot", version=__version__, docs_url=None, redoc_url=None)
 
+    # HTTP Basic Auth
+    auth_enabled = bool(credentials)
+    security = HTTPBasic()
+
+    def verify_credentials(creds: HTTPBasicCredentials = Depends(security)):
+        """Verify HTTP Basic Auth credentials against passwd file entries."""
+        password_hash = hashlib.sha256(creds.password.encode('utf-8')).hexdigest()
+        expected_hash = credentials.get(creds.username)
+        if expected_hash is None or not secrets.compare_digest(password_hash, expected_hash):
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid credentials",
+                headers={"WWW-Authenticate": "Basic"},
+            )
+        return creds.username
+
+    if auth_enabled:
+        # Add auth as a global dependency so all routes require it
+        app.dependency_overrides = {}
+        app.router.dependencies = [Depends(verify_credentials)]
+
     # Security headers middleware
     @app.middleware("http")
     async def add_security_headers(request: Request, call_next):
@@ -156,11 +181,11 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
     # =====================================================================
 
     @app.get("/", response_class=HTMLResponse)
-    async def index(request: Request):
+    def index(request: Request):
         return templates.TemplateResponse("scanlist.html", _tpl_ctx(request, pageid="SCANLIST"))
 
     @app.get("/newscan", response_class=HTMLResponse)
-    async def newscan(request: Request):
+    def newscan(request: Request):
         dbh = SpiderFootDb(app_config)
         types = dbh.eventTypes()
         return templates.TemplateResponse("newscan.html", _tpl_ctx(
@@ -170,7 +195,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
         ))
 
     @app.get("/clonescan", response_class=HTMLResponse)
-    async def clonescan(request: Request, id: str = Query(...)):
+    def clonescan(request: Request, id: str = Query(...)):
         dbh = SpiderFootDb(app_config)
         types = dbh.eventTypes()
         info = dbh.scanInstanceGet(id)
@@ -198,7 +223,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
         ))
 
     @app.get("/scaninfo", response_class=HTMLResponse)
-    async def scaninfo_page(request: Request, id: str = Query(...)):
+    def scaninfo_page(request: Request, id: str = Query(...)):
         dbh = SpiderFootDb(app_config)
         res = dbh.scanInstanceGet(id)
         if res is None:
@@ -209,7 +234,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
         ))
 
     @app.get("/opts", response_class=HTMLResponse)
-    async def opts_page(request: Request, updated: str = None):
+    def opts_page(request: Request, updated: str = None):
         config_service.token = random.SystemRandom().randint(0, 99999999)
         return templates.TemplateResponse("opts.html", _tpl_ctx(
             request, opts=app_config, pageid='SETTINGS',
@@ -221,7 +246,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
     # =====================================================================
 
     @app.post("/startscan")
-    async def startscan(
+    def startscan(
         request: Request,
         scanname: str = Form(""),
         scantarget: str = Form(""),
@@ -243,29 +268,29 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
 
         return RedirectResponse(url=f"{docroot}/scaninfo?id={scan_id}", status_code=302)
 
-    @app.get("/stopscan")
-    async def stopscan(id: str = Query("")):
+    @app.post("/stopscan")
+    def stopscan(id: str = Form("")):
         success, error_code, message = scan_service.stop_scan(id)
         if not success:
             return JSONResponse({'error': {'http_status': error_code, 'message': message}}, status_code=int(error_code))
         return JSONResponse("")
 
-    @app.get("/scandelete")
-    async def scandelete(id: str = Query("")):
+    @app.post("/scandelete")
+    def scandelete(id: str = Form("")):
         success, error_code, message = scan_service.delete_scan(id)
         if not success:
             return JSONResponse({'error': {'http_status': error_code, 'message': message}}, status_code=int(error_code))
         return JSONResponse("")
 
-    @app.get("/rerunscan")
-    async def rerunscan(request: Request, id: str = Query(...)):
+    @app.post("/rerunscan")
+    def rerunscan(request: Request, id: str = Form(...)):
         success, message, new_scan_id = scan_service.rerun_scan(id)
         if not success:
             return _error_page(request, message)
         return RedirectResponse(url=f"{docroot}/scaninfo?id={new_scan_id}", status_code=302)
 
-    @app.get("/rerunscanmulti")
-    async def rerunscanmulti(request: Request, ids: str = Query(...)):
+    @app.post("/rerunscanmulti")
+    def rerunscanmulti(request: Request, ids: str = Form(...)):
         for scan_id in ids.split(","):
             success, message, new_scan_id = scan_service.rerun_scan(scan_id)
             if not success:
@@ -277,7 +302,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
     # =====================================================================
 
     @app.api_route("/scanlist", methods=["GET", "POST"])
-    async def scanlist():
+    def scanlist():
         return JSONResponse(scan_service.list_scans())
 
     @app.api_route("/scanstatus", methods=["GET", "POST"])
@@ -414,7 +439,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
     # =====================================================================
 
     @app.post("/resultsetfp")
-    async def resultsetfp(
+    def resultsetfp(
         request: Request,
         id: str = Form(""),
         resultids: str = Form(""),
@@ -428,7 +453,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
     # =====================================================================
 
     @app.get("/scanexportlogs")
-    async def scanexportlogs(id: str = Query(...), dialect: str = Query("excel")):
+    def scanexportlogs(id: str = Query(...), dialect: str = Query("excel")):
         dbh = SpiderFootDb(app_config)
         try:
             data = dbh.scanLogs(id, None, None, True)
@@ -457,7 +482,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
         )
 
     @app.get("/scaneventresultexport")
-    async def scaneventresultexport(
+    def scaneventresultexport(
         request: Request,
         id: str = Query(...),
         type: str = Query("ALL"),
@@ -583,7 +608,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
         return _error_page(request, "Invalid export filetype.")
 
     @app.get("/scansearchresultexport")
-    async def scansearchresultexport(
+    def scansearchresultexport(
         request: Request,
         id: str = Query(...),
         eventType: str = Query(None),
@@ -626,7 +651,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
         return _error_page(request, "Invalid export filetype.")
 
     @app.get("/scancorrelationsexport")
-    async def scancorrelationsexport(
+    def scancorrelationsexport(
         request: Request,
         id: str = Query(...),
         filetype: str = Query("csv"),
@@ -717,7 +742,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
         )
 
     @app.get("/scanviz")
-    async def scanviz(id: str = Query(...), gexf: str = Query("0")):
+    def scanviz(id: str = Query(...), gexf: str = Query("0")):
         if not id:
             return Response("", media_type="text/html")
 
@@ -786,12 +811,12 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
     # =====================================================================
 
     @app.get("/optsraw")
-    async def optsraw():
+    def optsraw():
         token, data = config_service.get_raw_config()
         return JSONResponse(['SUCCESS', {'token': token, 'data': data}])
 
     @app.get("/optsexport")
-    async def optsexport(pattern: str = Query(None)):
+    def optsexport(pattern: str = Query(None)):
         content = config_service.export_config(pattern)
         return Response(
             content=content,
@@ -822,7 +847,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
         return RedirectResponse(url=f"{docroot}/opts?updated=1", status_code=302)
 
     @app.post("/savesettingsraw")
-    async def savesettingsraw(
+    def savesettingsraw(
         request: Request,
         allopts: str = Form(""),
         token: str = Form(""),
@@ -835,11 +860,11 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
     # =====================================================================
 
     @app.get("/ping")
-    async def ping():
+    def ping():
         return JSONResponse(["SUCCESS", __version__])
 
     @app.get("/modules")
-    async def modules():
+    def modules():
         ret = []
         modinfo = list(app_config['__modules__'].keys())
         if not modinfo:
@@ -852,7 +877,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
         return JSONResponse(ret)
 
     @app.get("/eventtypes")
-    async def eventtypes():
+    def eventtypes():
         dbh = SpiderFootDb(app_config)
         types = dbh.eventTypes()
         ret = []
@@ -861,7 +886,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
         return JSONResponse(sorted(ret, key=itemgetter(0)))
 
     @app.get("/correlationrules")
-    async def correlationrules():
+    def correlationrules():
         ret = []
         rules = app_config.get('__correlationrules__')
         if not rules:
@@ -876,7 +901,7 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
         return JSONResponse(ret)
 
     @app.post("/query")
-    async def query_endpoint(query: str = Form("")):
+    def query_endpoint(query: str = Form("")):
         success, result = data_service.query(query)
         if not success:
             status_code = 400 if "Non-SELECT" in str(result) or "Invalid" in str(result) else 500
@@ -886,294 +911,9 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
             )
         return JSONResponse(result)
 
-    @app.get("/vacuum")
-    async def vacuum():
+    @app.post("/vacuum")
+    def vacuum():
         status, message = scan_service.vacuum_db()
         return JSONResponse([status, message])
 
     return app
-
-
-# =====================================================================
-# Backward-compatible SpiderFootWebUi class for tests
-# =====================================================================
-
-class SpiderFootWebUi:
-    """SpiderFoot web interface -- thin wrapper for backward compatibility with tests."""
-
-    def __init__(self, web_config: dict, config: dict, loggingQueue=None):
-        if not isinstance(config, dict):
-            raise TypeError(f"config is {type(config)}; expected dict()")
-        if not config:
-            raise ValueError("config is empty")
-
-        if not isinstance(web_config, dict):
-            raise TypeError(f"web_config is {type(web_config)}; expected dict()")
-        if not config:
-            raise ValueError("web_config is empty")
-
-        self.docroot = web_config.get('root', '/').rstrip('/')
-
-        self.defaultConfig = deepcopy(config)
-        dbh = SpiderFootDb(self.defaultConfig, init=True)
-        sf = SpiderFoot(self.defaultConfig)
-        self.config = sf.configUnserialize(dbh.configGet(), self.defaultConfig)
-
-        if loggingQueue is None:
-            self.loggingQueue = mp.Queue()
-            logListenerSetup(self.loggingQueue, self.config)
-        else:
-            self.loggingQueue = loggingQueue
-        logWorkerSetup(self.loggingQueue)
-        self.log = logging.getLogger(f"spiderfoot.{__name__}")
-
-        self.token = None
-
-        self._scan_service = ScanService(self.config, self.defaultConfig, self.loggingQueue)
-        self._config_service = ConfigService(self.config, self.defaultConfig)
-        self._data_service = DataService(self.config)
-
-        self._templates = Jinja2Templates(
-            directory=os.path.join(os.path.dirname(os.path.abspath(__file__)), "spiderfoot", "templates")
-        )
-        self._templates.env.filters['urlize_step'] = _urlize_step
-
-    def _render_template(self, template_name, **kwargs):
-        ctx = {
-            "docroot": self.docroot,
-            "version": __version__,
-            "footer_message": random.choice(FOOTER_MESSAGES),
-        }
-        ctx.update(kwargs)
-        template = self._templates.env.get_template(template_name)
-        return template.render(**ctx)
-
-    def error_page(self):
-        pass
-
-    def error_page_401(self, status, message, traceback, version):
-        return ""
-
-    def error_page_404(self, status, message, traceback, version):
-        return self._render_template("error.html", message='Not Found', status=status)
-
-    def jsonify_error(self, status, message):
-        return {'error': {'http_status': status, 'message': message}}
-
-    def error(self, message):
-        return self._render_template("error.html", message=message)
-
-    def cleanUserInput(self, inputList):
-        return clean_user_input(inputList)
-
-    def searchBase(self, id=None, eventType=None, value=None):
-        return self._data_service.search(id, eventType, value)
-
-    def buildExcel(self, data, columnNames, sheetNameIndex=0):
-        return build_excel(data, columnNames, sheetNameIndex)
-
-    def scanexportlogs(self, id, dialect="excel"):
-        dbh = SpiderFootDb(self.config)
-        try:
-            data = dbh.scanLogs(id, None, None, True)
-        except Exception:
-            return self.error("Scan ID not found.")
-
-        if not data:
-            return self.error("Scan ID not found.")
-
-        fileobj = StringIO()
-        parser = csv.writer(fileobj, dialect=dialect)
-        parser.writerow(["Date", "Component", "Type", "Event", "Event ID"])
-        for row in data:
-            parser.writerow([
-                time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row[0] / 1000)),
-                str(row[1]), str(row[2]), str(row[3]), row[4]
-            ])
-        return fileobj.getvalue().encode('utf-8')
-
-    def scanopts(self, id):
-        return self._scan_service.scan_config(id)
-
-    def rerunscan(self, id):
-        success, message, new_id = self._scan_service.rerun_scan(id)
-        if not success:
-            return self.error(message)
-        return f"Scan {new_id} started"
-
-    def newscan(self):
-        dbh = SpiderFootDb(self.config)
-        types = dbh.eventTypes()
-        return self._render_template("newscan.html", pageid='NEWSCAN', types=types,
-                                     modules=self.config['__modules__'], scanname="",
-                                     selectedmods="", scantarget="")
-
-    def clonescan(self, id):
-        dbh = SpiderFootDb(self.config)
-        types = dbh.eventTypes()
-        info = dbh.scanInstanceGet(id)
-
-        if not info:
-            return self.error("Invalid scan ID.")
-
-        scanconfig = dbh.scanConfigGet(id)
-        scanname = info[0]
-        scantarget = info[1]
-
-        if scanname == "" or scantarget == "" or len(scanconfig) == 0:
-            return self.error("Something went wrong internally.")
-
-        target_type = SpiderFootHelpers.targetTypeFromString(scantarget)
-        if target_type is None:
-            scantarget = "&quot;" + scantarget + "&quot;"
-
-        modlist = scanconfig['_modulesenabled'].split(',')
-
-        return self._render_template("newscan.html", pageid='NEWSCAN', types=types,
-                                     modules=self.config['__modules__'], selectedmods=modlist,
-                                     scanname=str(scanname), scantarget=str(scantarget))
-
-    def index(self):
-        return self._render_template("scanlist.html", pageid='SCANLIST')
-
-    def scaninfo(self, id):
-        dbh = SpiderFootDb(self.config)
-        res = dbh.scanInstanceGet(id)
-        if res is None:
-            return self.error("Scan ID not found.")
-        return self._render_template("scaninfo.html", id=id, name=html.escape(res[0]),
-                                     status=res[5], pageid="SCANLIST")
-
-    def opts(self, updated=None):
-        self.token = random.SystemRandom().randint(0, 99999999)
-        self._config_service.token = self.token
-        return self._render_template("opts.html", opts=self.config, pageid='SETTINGS',
-                                     token=self.token, updated=updated)
-
-    def optsexport(self, pattern=None):
-        return self._config_service.export_config(pattern)
-
-    def optsraw(self):
-        token, data = self._config_service.get_raw_config()
-        self.token = token
-        return ['SUCCESS', {'token': token, 'data': data}]
-
-    def scandelete(self, id):
-        success, error_code, message = self._scan_service.delete_scan(id)
-        if not success:
-            return self.jsonify_error(error_code, message)
-        return ""
-
-    def savesettings(self, allopts, token, configFile=None):
-        config_file_contents = None
-        if configFile and hasattr(configFile, 'file') and configFile.file:
-            contents = configFile.file.read()
-            if isinstance(contents, bytes):
-                config_file_contents = contents.decode('utf-8')
-            else:
-                config_file_contents = contents
-
-        success, message = self._config_service.save_settings(allopts, token, config_file_contents)
-        if not success:
-            return self.error(message)
-        return None
-
-    def savesettingsraw(self, allopts, token):
-        status, message = self._config_service.save_settings_raw(allopts, token)
-        return json.dumps([status, message]).encode('utf-8')
-
-    def reset_settings(self):
-        return self._config_service.reset_settings()
-
-    def eventtypes(self):
-        dbh = SpiderFootDb(self.config)
-        types = dbh.eventTypes()
-        ret = []
-        for r in types:
-            ret.append([r[1], r[0]])
-        return sorted(ret, key=itemgetter(0))
-
-    def modules(self):
-        ret = []
-        modinfo = list(self.config['__modules__'].keys())
-        if not modinfo:
-            return ret
-        modinfo.sort()
-        for m in modinfo:
-            if "__" in m:
-                continue
-            ret.append({'name': m, 'descr': self.config['__modules__'][m]['descr']})
-        return ret
-
-    def correlationrules(self):
-        ret = []
-        rules = self.config.get('__correlationrules__')
-        if not rules:
-            return ret
-        for r in rules:
-            ret.append({
-                'id': r['id'],
-                'name': r['meta']['name'],
-                'descr': r['meta']['description'],
-                'risk': r['meta']['risk'],
-            })
-        return ret
-
-    def ping(self):
-        return ["SUCCESS", __version__]
-
-    def query(self, query):
-        success, result = self._data_service.query(query)
-        if not success:
-            return self.jsonify_error('400' if 'Non-SELECT' in str(result) or 'Invalid' in str(result) else '500', result)
-        return result
-
-    def startscan(self, scanname, scantarget, modulelist, typelist, usecase):
-        success, message, scan_id = self._scan_service.start_scan(scanname, scantarget, modulelist, typelist, usecase)
-        if not success:
-            return self.error(message)
-        return f"Scan {scan_id} started"
-
-    def stopscan(self, id):
-        success, error_code, message = self._scan_service.stop_scan(id)
-        if not success:
-            return self.jsonify_error(error_code, message)
-        return ""
-
-    def scanlog(self, id, limit=None, rowId=None, reverse=None):
-        return self._scan_service.scan_logs(id, limit, rowId, reverse)
-
-    def scanerrors(self, id, limit=None):
-        return self._scan_service.scan_errors(id, limit)
-
-    def scanlist(self):
-        return self._scan_service.list_scans()
-
-    def scanstatus(self, id):
-        return self._scan_service.scan_status(id)
-
-    def scansummary(self, id, by):
-        return self._scan_service.scan_summary(id, by)
-
-    def scancorrelations(self, id):
-        return self._scan_service.scan_correlations(id)
-
-    def scaneventresults(self, id, eventType=None, filterfp=False, correlationId=None):
-        return self._scan_service.scan_event_results(id, eventType, filterfp, correlationId)
-
-    def scaneventresultsunique(self, id, eventType, filterfp=False):
-        return self._scan_service.scan_event_results_unique(id, eventType, filterfp)
-
-    def search(self, id=None, eventType=None, value=None):
-        try:
-            return self.searchBase(id, eventType, value)
-        except Exception:
-            return []
-
-    def scanhistory(self, id):
-        if not id:
-            return self.jsonify_error('404', "No scan specified")
-        return self._scan_service.scan_history(id)
-
-    def scanelementtypediscovery(self, id, eventType):
-        return self._scan_service.scan_element_type_discovery(id, eventType)

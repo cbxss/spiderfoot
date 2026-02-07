@@ -57,21 +57,8 @@ class sfp__stor_stdout(SpiderFootPlugin):
 
     def output(self, event):
         d = self.opts['_csvdelim']
-        if type(event.data) in [list, dict]:
-            data = str(event.data)
-        else:
-            data = event.data
-
-        if type(data) != str:
-            data = str(event.data)
-
-        if type(event.sourceEvent.data) in [list, dict]:
-            srcdata = str(event.sourceEvent.data)
-        else:
-            srcdata = event.sourceEvent.data
-
-        if type(srcdata) != str:
-            srcdata = str(event.sourceEvent.data)
+        data = str(event.data) if not isinstance(event.data, str) else event.data
+        srcdata = str(event.sourceEvent.data) if not isinstance(event.sourceEvent.data, str) else event.sourceEvent.data
 
         if self.opts['_stripnewline']:
             data = data.replace("\n", " ").replace("\r", "")

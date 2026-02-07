@@ -33,7 +33,7 @@ class SpiderFootConfig:
         if not opts:
             return storeopts
 
-        for opt in list(opts.keys()):
+        for opt in opts:
             # Filter out system temporary variables like GUID and others
             if opt.startswith('__') and filterSystem:
                 continue
@@ -101,7 +101,7 @@ class SpiderFootConfig:
         returnOpts = referencePoint
 
         # Global options
-        for opt in list(referencePoint.keys()):
+        for opt in referencePoint:
             if opt.startswith('__') and filterSystem:
                 # Leave out system variables
                 continue

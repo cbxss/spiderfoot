@@ -8,6 +8,7 @@ import json
 import logging
 import multiprocessing as mp
 import random
+import re
 import string
 import time
 from copy import deepcopy
@@ -722,8 +723,18 @@ class DataService:
 
         return retdata
 
+    # Dangerous SQL keywords that could modify data or attach external databases
+    _FORBIDDEN_SQL_KEYWORDS = re.compile(
+        r'\b(ATTACH|DETACH|PRAGMA|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|REPLACE|GRANT|REVOKE)\b',
+        re.IGNORECASE,
+    )
+
     def query(self, query: str) -> tuple:
-        """Run a SQL query.
+        """Run a read-only SQL query.
+
+        Only SELECT statements are allowed. Queries containing semicolons
+        or dangerous keywords (ATTACH, DROP, etc.) are rejected to prevent
+        SQL injection attacks.
 
         Returns:
             tuple: (success: bool, data_or_error: list|str)
@@ -733,11 +744,21 @@ class DataService:
         if not query:
             return (False, "Invalid query.")
 
-        if not query.lower().startswith("select"):
-            return (False, "Non-SELECTs are unpredictable and not recommended.")
+        stripped = query.strip()
+
+        if not stripped.lower().startswith("select"):
+            return (False, "Non-SELECT queries are not permitted.")
+
+        # Reject multiple statements
+        if ';' in stripped:
+            return (False, "Invalid query: multiple statements are not permitted.")
+
+        # Reject dangerous keywords that could be injected via subqueries
+        if self._FORBIDDEN_SQL_KEYWORDS.search(stripped):
+            return (False, "Invalid query: contains forbidden SQL keywords.")
 
         try:
-            ret = dbh.dbh.execute(query)
+            ret = dbh.dbh.execute(stripped)
             data = ret.fetchall()
             column_names = [c[0] for c in dbh.dbh.description]
             return (True, [dict(zip(column_names, row)) for row in data])

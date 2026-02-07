@@ -75,7 +75,7 @@ class SpiderFootPluginLogger(logging.Logger):
 # end of logging overrides
 
 
-class SpiderFootPlugin():
+class SpiderFootPlugin:
     """SpiderFootPlugin module object
 
     Attributes:
@@ -97,7 +97,7 @@ class SpiderFootPlugin():
     # Will be set to True by the controller if the user aborts scanning
     _stopScanning = False
     # Modules that will be notified when this module produces events
-    _listenerModules = list()
+    _listenerModules = None
     # Current event being processed
     _currentEvent = None
     # Target currently being acted against
@@ -128,11 +128,15 @@ class SpiderFootPlugin():
     # SpiderFoot object, set in each module's setup() function
     sf = None
     # Configuration, set in each module's setup() function
-    opts = dict()
+    opts = None
     # Maximum threads
     maxThreads = 1
 
     def __init__(self) -> None:
+        self._listenerModules = []
+        # Only set opts if the subclass didn't define it at the class level
+        if self.opts is None:
+            self.opts = {}
         # Holds the thread object when module threading is enabled
         self.thread = None
         # logging overrides

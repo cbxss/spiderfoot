@@ -83,6 +83,19 @@ function deleteSelected() {
     }).set({title:"Delete scans?"});
 }
 
+function rerunScan(id) {
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = docroot + '/rerunscan';
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'id';
+    input.value = id;
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+}
+
 function rerunSelected() {
     ids = getSelected();
     if (!ids) {
@@ -91,7 +104,16 @@ function rerunSelected() {
     }
 
     sf.log("Re-running scans: " + ids.join(','));
-    window.location.href = docroot + '/rerunscanmulti?ids=' + ids.join(',');
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = docroot + '/rerunscanmulti';
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'ids';
+    input.value = ids.join(',');
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
 }
 
 function exportSelected(type) {
@@ -196,9 +218,9 @@ function showlisttable(types, filter, data) {
             filtered++;
             continue;
         }
-        table += "<tr><td class='text-center'><input type='checkbox' id='cb_" + data[i][0] + "'></td>"
-        table += "<td><a href=" + docroot + "/scaninfo?id=" + data[i][0] + ">" + data[i][1] + "</a></td>";
-        table += "<td>" + data[i][2] + "</td>";
+        table += "<tr><td class='text-center'><input type='checkbox' id='cb_" + sf.escapeHtml(data[i][0]) + "'></td>"
+        table += "<td><a href=" + docroot + "/scaninfo?id=" + encodeURIComponent(data[i][0]) + ">" + sf.escapeHtml(data[i][1]) + "</a></td>";
+        table += "<td>" + sf.escapeHtml(data[i][2]) + "</td>";
         table += "<td>" + data[i][3] + "</td>";
         table += "<td>" + data[i][5] + "</td>";
 
@@ -225,12 +247,12 @@ function showlisttable(types, filter, data) {
         table += "</td>";
         table += "<td class='text-center'>";
         if (data[i][6] == "RUNNING" || data[i][6] == "STARTING" || data[i][6] == "STARTED" || data[i][6] == "INITIALIZING") {
-            table += "<a rel='tooltip' title='Stop Scan' href='javascript:stopScan(\"" + data[i][0] + "\");'><i class='glyphicon glyphicon-stop text-muted'></i></a>";
+            table += "<a rel='tooltip' title='Stop Scan' href='javascript:stopScan(\"" + sf.escapeHtml(data[i][0]) + "\");'><i class='glyphicon glyphicon-stop text-muted'></i></a>";
         } else {
-            table += "<a rel='tooltip' title='Delete Scan' href='javascript:deleteScan(\"" + data[i][0] + "\");'><i class='glyphicon glyphicon-trash text-muted'></i></a>";
-            table += "&nbsp;&nbsp;<a rel='tooltip' title='Re-run Scan' href=" + docroot + "/rerunscan?id=" + data[i][0] + "><i class='glyphicon glyphicon-repeat text-muted'></i></a>";
+            table += "<a rel='tooltip' title='Delete Scan' href='javascript:deleteScan(\"" + sf.escapeHtml(data[i][0]) + "\");'><i class='glyphicon glyphicon-trash text-muted'></i></a>";
+            table += "&nbsp;&nbsp;<a rel='tooltip' title='Re-run Scan' href='javascript:rerunScan(\"" + sf.escapeHtml(data[i][0]) + "\")'><i class='glyphicon glyphicon-repeat text-muted'></i></a>";
         }
-        table += "&nbsp;&nbsp;<a rel='tooltip' title='Clone Scan' href=" + docroot + "/clonescan?id=" + data[i][0] + "><i class='glyphicon glyphicon-plus-sign text-muted'></i></a>";
+        table += "&nbsp;&nbsp;<a rel='tooltip' title='Clone Scan' href=" + docroot + "/clonescan?id=" + encodeURIComponent(data[i][0]) + "><i class='glyphicon glyphicon-plus-sign text-muted'></i></a>";
         table += "</td></tr>";
     }
 

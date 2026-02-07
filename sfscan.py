@@ -28,7 +28,7 @@ def startSpiderFootScanner(loggingQueue, *args, **kwargs):
     return SpiderFootScanner(*args, **kwargs)
 
 
-class SpiderFootScanner():
+class SpiderFootScanner:
     """SpiderFootScanner object.
 
     Attributes:
@@ -43,10 +43,10 @@ class SpiderFootScanner():
     __dbh = None
     __targetValue = None
     __targetType = None
-    __moduleList = list()
+    __moduleList = None
     __target = None
-    __moduleInstances = dict()
-    __modconfig = dict()
+    __moduleInstances = None
+    __modconfig = None
     __scanName = None
 
     def __init__(self, scanName: str, scanId: str, targetValue: str, targetType: str, moduleList: list, globalOpts: dict, start: bool = True) -> None:
@@ -74,6 +74,8 @@ class SpiderFootScanner():
             raise ValueError("globalOpts is empty")
 
         self.__config = deepcopy(globalOpts)
+        self.__moduleInstances = {}
+        self.__modconfig = {}
         self.__dbh = SpiderFootDb(self.__config)
 
         if not isinstance(scanName, str):

@@ -24,7 +24,7 @@ class SpiderFootCache:
             data (str): Data to cache
         """
         pathLabel = hashlib.sha224(label.encode('utf-8')).hexdigest()
-        cacheFile = SpiderFootHelpers.cachePath() + "/" + pathLabel
+        cacheFile = os.path.join(SpiderFootHelpers.cachePath(), pathLabel)
         with io.open(cacheFile, "w", encoding="utf-8", errors="ignore") as fp:
             if isinstance(data, list):
                 for line in data:
@@ -54,7 +54,7 @@ class SpiderFootCache:
             return None
 
         pathLabel = hashlib.sha224(label.encode('utf-8')).hexdigest()
-        cacheFile = SpiderFootHelpers.cachePath() + "/" + pathLabel
+        cacheFile = os.path.join(SpiderFootHelpers.cachePath(), pathLabel)
         try:
             cache_stat = os.stat(cacheFile)
         except OSError:
