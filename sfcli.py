@@ -1327,7 +1327,7 @@ class SpiderFootCli(cmd.Cmd):
         """shell
         Run a shell command locally."""
         self.dprint("Running shell command:" + str(line))
-        self.dprint(subprocess.run(line, shell=True, capture_output=True, text=True).stdout, plain=True)  # noqa: S603
+        self.dprint(subprocess.run(line, shell=True, capture_output=True, text=True).stdout, plain=True)  # noqa: S603,DUO116
 
     def do_clear(self, line):
         """clear
