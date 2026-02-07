@@ -276,7 +276,7 @@ class sfp_tool_nuclei(SpiderFootPlugin):
                     evt = SpiderFootEvent(etype, datatext, self.__name__, srcevent)
                     self.notifyListeners(evt)
 
-            except json.JSONDecodeError as e:
+            except json.JSONDecodeError:
                 self.debug(f"Skipping non-JSON line: {line}")
                 continue
             except KeyError as e:

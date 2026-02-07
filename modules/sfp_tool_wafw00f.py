@@ -12,7 +12,7 @@
 # -------------------------------------------------------------------------------
 
 import json
-import os.path
+import os
 import tempfile
 from subprocess import PIPE, Popen
 
@@ -98,7 +98,8 @@ class sfp_tool_wafw00f(SpiderFootPlugin):
             self.error("Invalid input, refusing to run.")
             return
 
-        output_file = tempfile.mktemp(suffix=".json")
+        fd, output_file = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
 
         args = [
             self.opts['python_path'],

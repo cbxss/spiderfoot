@@ -17,7 +17,7 @@ import re
 import sqlite3
 import threading
 import time
-import typing
+
 
 from .event import SpiderFootEvent
 
