@@ -25,7 +25,7 @@ jobs:
         run: pip install uv
       - name: Install dependencies
         run: |
-          uv pip install --system flake8 pytest
+          uv pip install --system ".[dev]"
           uv pip install --system -r test/requirements.txt
       - name: Lint with flake8
         run: |
