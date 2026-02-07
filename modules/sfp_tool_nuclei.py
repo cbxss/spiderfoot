@@ -155,7 +155,7 @@ class sfp_tool_nuclei(SpiderFootPlugin):
             args = [
                 exe,
                 "-silent",
-                "-json",
+                "-jsonl",
                 "-concurrency",
                 "100",
                 "-retries",
@@ -189,15 +189,32 @@ class sfp_tool_nuclei(SpiderFootPlugin):
         if not content:
             return
 
-        try:
-            for line in content.split("\n"):
-                if not line:
+        for line in content.split("\n"):
+            if not line.strip():
+                continue
+
+            if not line.strip().startswith('{'):
+                continue
+
+            try:
+                data = json.loads(line)
+
+                if 'matched-at' not in data or 'info' not in data:
                     continue
 
-                data = json.loads(line)
                 srcevent = event
-                host = data['matched-at'].split(":")[0]
-                if host != eventData:
+                matched_url = data.get('matched-at', '')
+                if matched_url:
+                    if matched_url.startswith('http'):
+                        from urllib.parse import urlparse
+                        parsed = urlparse(matched_url)
+                        host = parsed.hostname
+                    else:
+                        host = data.get('host', eventData)
+                else:
+                    host = data.get('host', eventData)
+
+                if host and host != eventData:
                     if self.sf.validIP(host):
                         srctype = "IP_ADDRESS"
                     else:
@@ -205,37 +222,66 @@ class sfp_tool_nuclei(SpiderFootPlugin):
                     srcevent = SpiderFootEvent(srctype, host, self.__name__, event)
                     self.notifyListeners(srcevent)
 
-                matches = re.findall(r"CVE-\d{4}-\d{4,7}", line)
-                if matches:
-                    for cve in matches:
-                        etype, cvetext = self.sf.cveInfo(cve)
-                        e = SpiderFootEvent(
-                            etype, cvetext, self.__name__, srcevent
-                        )
-                        self.notifyListeners(e)
+                template_info = data.get('info', {})
+                cve_list = []
+
+                classification = template_info.get('classification', {})
+                if classification.get('cve-id'):
+                    cve_id = classification.get('cve-id')
+                    if isinstance(cve_id, list):
+                        cve_list.extend(cve_id)
+                    elif isinstance(cve_id, str):
+                        cve_list.append(cve_id)
+
+                template_id = data.get('template-id', '')
+                if 'CVE-' in template_id:
+                    matches = re.findall(r"CVE-\d{4}-\d{4,7}", template_id)
+                    cve_list.extend(matches)
+
+                if cve_list:
+                    for cve in cve_list:
+                        if cve and cve != 'null':
+                            etype, cvetext = self.sf.cveInfo(cve)
+                            e = SpiderFootEvent(etype, cvetext, self.__name__, srcevent)
+                            self.notifyListeners(e)
                 else:
-                    if "matcher-name" in data:
+                    severity = template_info.get('severity', 'info').lower()
+
+                    if severity == "info":
+                        etype = "WEBSERVER_TECHNOLOGY"
+                    else:
                         etype = "VULNERABILITY_GENERAL"
-                        if data['info']['severity'] == "info":
-                            etype = "WEBSERVER_TECHNOLOGY"
 
-                        datatext = f"Template: {data['info']['name']}({data['template-id']})\n"
-                        datatext += f"Matcher: {data['matcher-name']}\n"
-                        datatext += f"Matched at: {data['matched-at']}\n"
-                        if data['info'].get('reference'):
-                            datatext += f"Reference: <SFURL>{data['info']['reference'][0]}</SFURL>"
+                    datatext = f"Template: {template_info.get('name', 'Unknown')} ({data.get('template-id', 'Unknown')})\n"
 
-                        evt = SpiderFootEvent(
-                            etype,
-                            datatext,
-                            self.__name__,
-                            srcevent,
-                        )
-                        self.notifyListeners(evt)
-        except (KeyError, ValueError) as e:
-            self.error(f"Couldn't parse the JSON output of Nuclei: {e}")
-            self.error(f"Nuclei content: {content}")
-            return
+                    if data.get('matcher-name'):
+                        datatext += f"Matcher: {data.get('matcher-name')}\n"
+
+                    if data.get('matched-at'):
+                        datatext += f"Matched at: {data.get('matched-at')}\n"
+
+                    if severity != 'info':
+                        datatext += f"Severity: {severity}\n"
+
+                    if template_info.get('description'):
+                        datatext += f"Description: {template_info.get('description')}\n"
+
+                    references = template_info.get('reference', [])
+                    if references:
+                        if isinstance(references, list) and len(references) > 0:
+                            datatext += f"Reference: <SFURL>{references[0]}</SFURL>"
+                        elif isinstance(references, str):
+                            datatext += f"Reference: <SFURL>{references}</SFURL>"
+
+                    evt = SpiderFootEvent(etype, datatext, self.__name__, srcevent)
+                    self.notifyListeners(evt)
+
+            except json.JSONDecodeError as e:
+                self.debug(f"Skipping non-JSON line: {line}")
+                continue
+            except KeyError as e:
+                self.debug(f"Missing expected key in Nuclei output: {e}")
+                continue
 
 
 # End of sfp_tool_nuclei class

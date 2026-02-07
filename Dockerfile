@@ -34,22 +34,20 @@
 #   sudo docker build -t spiderfoot-test --build-arg REQUIREMENTS=test/requirements.txt .
 #   sudo docker run --rm spiderfoot-test -m pytest --flake8 .
 
-FROM alpine:3.12.4 AS build
+FROM alpine:3.20 AS build
 ARG REQUIREMENTS=requirements.txt
 RUN apk add --no-cache gcc git curl python3 python3-dev py3-pip swig tinyxml-dev \
- python3-dev musl-dev openssl-dev libffi-dev libxslt-dev libxml2-dev jpeg-dev \
+ musl-dev openssl-dev libffi-dev libxslt-dev libxml2-dev jpeg-dev \
  openjpeg-dev zlib-dev cargo rust
-RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin":$PATH
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+RUN uv venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+ENV VIRTUAL_ENV="/opt/venv"
 COPY $REQUIREMENTS requirements.txt ./
-RUN ls
-RUN echo "$REQUIREMENTS"
-RUN pip3 install -U pip
-RUN pip3 install -r "$REQUIREMENTS"
+RUN uv pip install -r "$REQUIREMENTS"
 
 
-
-FROM alpine:3.13.0
+FROM alpine:3.20
 WORKDIR /home/spiderfoot
 
 # Place database and logs outside installation directory
