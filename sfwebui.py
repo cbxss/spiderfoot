@@ -281,15 +281,25 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
         return JSONResponse(scan_service.list_scans())
 
     @app.api_route("/scanstatus", methods=["GET", "POST"])
-    async def scanstatus(id: str = Query(...)):
+    async def scanstatus(request: Request, id: str = Query(None)):
+        if request.method == "POST":
+            form = await request.form()
+            id = form.get("id", id)
         return JSONResponse(scan_service.scan_status(id))
 
     @app.api_route("/scansummary", methods=["GET", "POST"])
-    async def scansummary(id: str = Query(...), by: str = Query(...)):
+    async def scansummary(request: Request, id: str = Query(None), by: str = Query(None)):
+        if request.method == "POST":
+            form = await request.form()
+            id = form.get("id", id)
+            by = form.get("by", by)
         return JSONResponse(scan_service.scan_summary(id, by))
 
     @app.api_route("/scancorrelations", methods=["GET", "POST"])
-    async def scancorrelations(id: str = Query(...)):
+    async def scancorrelations(request: Request, id: str = Query(None)):
+        if request.method == "POST":
+            form = await request.form()
+            id = form.get("id", id)
         return JSONResponse(scan_service.scan_correlations(id))
 
     @app.api_route("/scaneventresults", methods=["GET", "POST"])
@@ -360,7 +370,10 @@ def create_app(web_config: dict, config: dict, logging_queue=None) -> FastAPI:
         return JSONResponse(scan_service.scan_errors(id, limit))
 
     @app.api_route("/scanhistory", methods=["GET", "POST"])
-    async def scanhistory(id: str = Query(None)):
+    async def scanhistory(request: Request, id: str = Query(None)):
+        if request.method == "POST":
+            form = await request.form()
+            id = form.get("id", id)
         if not id:
             return JSONResponse({'error': {'http_status': '404', 'message': 'No scan specified'}}, status_code=404)
         return JSONResponse(scan_service.scan_history(id))
