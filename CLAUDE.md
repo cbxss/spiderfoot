@@ -36,11 +36,20 @@ python -m pytest test/integration/modules/
 
 ## Architecture
 
-SpiderFoot is an OSINT automation tool with 238 scanner modules. It has two interfaces: a CherryPy web UI (`sfwebui.py`) and a CLI (`sf.py`).
+SpiderFoot is an OSINT automation tool with 238 scanner modules. It has two interfaces: a FastAPI web UI (`sfwebui.py`) and a CLI (`sf.py`).
 
 ### Core Classes
 
-- **`SpiderFoot`** (`sflib.py`) — Main orchestrator. Handles HTTP requests, DNS resolution, proxy config, target parsing, and module coordination.
+- **`SpiderFoot`** (`sflib.py`) — Thin facade (~395 lines) delegating to 9 domain modules. Provides a unified API for all modules via `self.sf.*` calls.
+  - `spiderfoot/ip.py` — IP validation (validIP, validIP6, validIpNetwork, etc.)
+  - `spiderfoot/cache.py` — Cache get/put
+  - `spiderfoot/domain.py` — Domain/URL parsing (urlFQDN, hostDomain, isDomain, etc.)
+  - `spiderfoot/dns_utils.py` — DNS resolution (resolveHost, resolveIP, checkDnsWildcard, etc.)
+  - `spiderfoot/http.py` — HTTP requests (fetchUrl, getSession, useProxyForUrl)
+  - `spiderfoot/ssl_utils.py` — SSL/TLS (parseCert, safeSocket, safeSSLSocket)
+  - `spiderfoot/config.py` — Config serialization (configSerialize, configUnserialize, optValueToData)
+  - `spiderfoot/module_introspection.py` — Module discovery (modulesProducing, modulesConsuming)
+  - `spiderfoot/search.py` — Search engines (googleIterate, bingIterate, cveInfo)
 - **`SpiderFootScanner`** (`sfscan.py`) — Controls individual scan execution. Spawned as a separate process per scan. Manages module lifecycle and event routing.
 - **`SpiderFootPlugin`** (`spiderfoot/plugin.py`) — Base class for all modules. Provides queue-based event handling, threading via `SpiderFootThreadPool`, and logging.
 - **`SpiderFootEvent`** (`spiderfoot/event.py`) — Immutable-style data object representing discovered information. Has `eventType`, `data`, `module`, `confidence`, `visibility`, `risk`, and a `sourceEvent` parent link forming a discovery chain.
@@ -48,6 +57,9 @@ SpiderFoot is an OSINT automation tool with 238 scanner modules. It has two inte
 - **`SpiderFootDb`** (`spiderfoot/db.py`) — SQLite layer with WAL mode and thread-safe RLock. Auto-creates DB at `~/.spiderfoot/spiderfoot.db`.
 - **`SpiderFootCorrelator`** (`spiderfoot/correlation.py`) — Post-scan rule engine that processes YAML rules from `correlations/` against scan results.
 - **`SpiderFootHelpers`** (`spiderfoot/helpers.py`) — Static utility class for type detection, module loading, path helpers, regex matching.
+- **Web UI** (`sfwebui.py`) — FastAPI application with Jinja2 templates. Routes delegate to service layer.
+  - `spiderfoot/services.py` — Business logic: `ScanService` (start/stop/delete scans), `ConfigService` (save/reset settings), `DataService` (search, export).
+  - `spiderfoot/templates/*.html` — Jinja2 templates (header, footer, scanlist, newscan, scaninfo, opts, error).
 
 ### Event-Driven Module System
 
@@ -81,7 +93,7 @@ Flake8 with max line length 120, max complexity 60, Google docstring convention.
 
 ## Testing
 
-Tests are in `test/` with `unit/`, `integration/`, and `acceptance/` subdirectories. Uses pytest with xdist (parallel), coverage, and mock plugins. Test dependencies are in `test/requirements.txt` (separate from project dev deps). CI runs on Python 3.10-3.13 across Ubuntu and macOS.
+Tests are in `test/` with `unit/`, `integration/`, and `acceptance/` subdirectories. Uses pytest with xdist (parallel), coverage, and mock plugins. Test dependencies are in `pyproject.toml` under `[project.optional-dependencies] dev`. CI runs on Python 3.10-3.13 across Ubuntu and macOS.
 
 ## Docker
 

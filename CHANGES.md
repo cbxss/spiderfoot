@@ -107,3 +107,39 @@ The following fixes were cherry-picked from upstream PRs:
 - Fixed `secure` library API for 1.x compatibility (was pinned to 0.3.x)
 - Fixed PyPDF2 deprecated API calls in `sfp_filemeta.py` to use pypdf style
 - Fixed 14 `type(x) == Y` comparisons to use `isinstance()`
+
+### Modernization (v4.1.0+)
+
+#### CherryPy to FastAPI Migration
+- Replaced CherryPy web framework with **FastAPI + Uvicorn**
+- Replaced Mako templates with **Jinja2** (7 `.html` files)
+- Extracted business logic into service layer (`spiderfoot/services.py`): `ScanService`, `ConfigService`, `DataService`
+- All old CherryPy URLs preserved as backward-compatible redirects for `sfcli.py`
+- Startup uses `uvicorn.run()` instead of `cherrypy.quickstart()`
+- Dependencies updated: removed CherryPy, cherrypy-cors, Mako; added fastapi, uvicorn, jinja2, python-multipart
+
+#### sflib.py Decomposition
+- Decomposed 1,669-line god class into **9 focused domain modules** with a thin facade pattern:
+  - `spiderfoot/ip.py` -- IP validation
+  - `spiderfoot/cache.py` -- Cache get/put
+  - `spiderfoot/domain.py` -- Domain/URL parsing
+  - `spiderfoot/dns_utils.py` -- DNS resolution
+  - `spiderfoot/http.py` -- HTTP requests
+  - `spiderfoot/ssl_utils.py` -- SSL/TLS utilities (also fixes `ssl.wrap_socket()` deprecation)
+  - `spiderfoot/config.py` -- Config serialization
+  - `spiderfoot/module_introspection.py` -- Module discovery
+  - `spiderfoot/search.py` -- Search engine iteration
+- `sflib.py` reduced from 1,669 to ~395 lines (thin delegation facade)
+- Zero module changes required -- all `self.sf.*` calls continue working
+
+#### Mutable Default Arguments Fixed
+- Fixed `userOpts=dict()` anti-pattern in 213 modules, `plugin.py`, and `db.py`
+- Pattern: `def setup(self, sfc, userOpts=None):` with `if userOpts is None: userOpts = {}`
+
+#### Cleanup
+- Removed dead files: `.pylintrc`, `VERSION`, `THANKYOU`, `AGENTS.md`, `test/bandit`, `test/update-requirements`, old `.tmpl` templates
+- Renamed `setup.cfg` to `.flake8`
+- Moved `generate-certificate` to `scripts/`
+- Consolidated `test/requirements.txt` into `pyproject.toml [dev]`
+- Fixed Dockerfiles to use `pyproject.toml` install instead of deleted `requirements.txt`
+- Rewrote integration tests for FastAPI TestClient

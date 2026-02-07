@@ -19,7 +19,7 @@ SpiderFoot has an embedded web-server for providing a clean and intuitive web-ba
 ### FEATURES
 
 - Web based UI or CLI
-- Over 215 modules (see below)
+- Over 230 modules (see below)
 - Python 3.10+
 - YAML-configurable [correlation engine](/correlations/README.md) with [37 pre-defined rules](/correlations)
 - CSV/JSON/GEXF export
@@ -50,7 +50,7 @@ You can target the following entities in a SpiderFoot scan:
  - Person's name
  - Bitcoin address
 
-SpiderFoot's 215+ modules feed each other in a publisher/subscriber model to ensure maximum data extraction to do things like:
+SpiderFoot's 230+ modules feed each other in a publisher/subscriber model to ensure maximum data extraction to do things like:
 
 - [Host/sub-domain/TLD enumeration/extraction](https://asciinema.org/a/295912)
 - [Email address, phone number and human name extraction](https://asciinema.org/a/295947)
