@@ -1,10 +1,19 @@
+import os
+import tempfile
+
 import pytest
 from spiderfoot import SpiderFootHelpers
 
 
+def _worker_db_path():
+    """Return a unique database path per pytest-xdist worker."""
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
+    tmpdir = tempfile.gettempdir()
+    return os.path.join(tmpdir, f"spiderfoot.test.{worker}.db")
+
+
 @pytest.fixture(autouse=True)
-def default_options(request, tmp_path):
-    db_path = str(tmp_path / "spiderfoot.test.db")
+def default_options(request):
     request.cls.default_options = {
         '_debug': False,
         '__logging': True,  # Logging in general
@@ -15,7 +24,7 @@ def default_options(request, tmp_path):
         '_internettlds': 'https://publicsuffix.org/list/effective_tld_names.dat',
         '_internettlds_cache': 72,
         '_genericusers': ",".join(SpiderFootHelpers.usernamesFromWordlists(['generic-usernames'])),
-        '__database': db_path,  # note: test database file, unique per test
+        '__database': _worker_db_path(),  # note: unique per xdist worker
         '__modules__': None,  # List of modules. Will be set after start-up.
         '__correlationrules__': None,  # List of correlation rules. Will be set after start-up.
         '_socks1type': '',
