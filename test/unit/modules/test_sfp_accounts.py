@@ -1,11 +1,10 @@
 import pytest
 import threading
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from modules.sfp_accounts import sfp_accounts
 from sflib import SpiderFoot
-from spiderfoot import SpiderFootEvent, SpiderFootTarget
 
 
 @pytest.mark.usefixtures
@@ -285,7 +284,6 @@ class TestModuleAccounts(unittest.TestCase):
         site = self._make_site(strip_bad_char=['.', '_'])
 
         calls = []
-        original_fetchUrl = module.sf.fetchUrl
 
         def capture_fetchUrl(url, **kwargs):
             calls.append(url)
@@ -320,6 +318,7 @@ class TestModuleAccounts(unittest.TestCase):
 
         # Mock fetchUrl to return match for first site, miss for second
         call_count = [0]
+
         def smart_fetchUrl(url, **kwargs):
             call_count[0] += 1
             if call_count[0] == 1:
