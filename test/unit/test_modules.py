@@ -70,6 +70,7 @@ class TestSpiderFootModuleLoading(unittest.TestCase):
             "FREE_NOAUTH_LIMITED",
             "FREE_NOAUTH_UNLIMITED",
             "PRIVATE_ONLY",
+            "RETIRED",
         ]
 
         sfModules = self.load_modules(sf)
